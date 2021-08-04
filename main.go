@@ -89,6 +89,7 @@ var buyCmd = &cli.Command{
 
 		threshold := os.Getenv("THRESHOLD")
 		svc := NewService(ctx, threshold)
+		defer svc.closer()
 
 		if svc.IsGasPriceBelowThreshold(ctx) {
 			worker, err := svc.CreateBLSWallet(ctx)
@@ -103,6 +104,7 @@ var buyCmd = &cli.Command{
 				log.Fatalf("init miner failed: %s", err)
 				return err
 			}
+			//TODO: read miner token out of newly created ~/.lotusminer/token file into env var
 		}
 		return nil
 	},
