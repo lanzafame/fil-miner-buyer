@@ -11,6 +11,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/filecoin-project/go-address"
 	jsonrpc "github.com/filecoin-project/go-jsonrpc"
+	"github.com/filecoin-project/go-state-types/dline"
 	lotusapi "github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
 	"github.com/filecoin-project/lotus/blockstore"
@@ -233,66 +234,20 @@ func (s *Service) GetMinerProvingInfo(ctx context.Context) error {
 
 	fmt.Printf("Miner: %s\n", color.BlueString("%s", maddr))
 
-	proving := uint64(0)
-	faults := uint64(0)
-	recovering := uint64(0)
-	curDeadlineSectors := uint64(0)
-
-	if err := mas.ForEachDeadline(func(dlIdx uint64, dl miner.Deadline) error {
-		return dl.ForEachPartition(func(partIdx uint64, part miner.Partition) error {
-			if bf, err := part.LiveSectors(); err != nil {
-				return err
-			} else if count, err := bf.Count(); err != nil {
-				return err
-			} else {
-				proving += count
-				if dlIdx == cd.Index {
-					curDeadlineSectors += count
-				}
-			}
-
-			if bf, err := part.FaultySectors(); err != nil {
-				return err
-			} else if count, err := bf.Count(); err != nil {
-				return err
-			} else {
-				faults += count
-			}
-
-			if bf, err := part.RecoveringSectors(); err != nil {
-				return err
-			} else if count, err := bf.Count(); err != nil {
-				return err
-			} else {
-				recovering += count
-			}
-
-			return nil
-		})
-	}); err != nil {
-		return xerrors.Errorf("walking miner deadlines and partitions: %w", err)
-	}
-
-	var faultPerc float64
-	if proving > 0 {
-		faultPerc = float64(faults*10000/proving) / 100
-	}
-
 	fmt.Printf("Current Epoch:           %d\n", cd.CurrentEpoch)
 
 	fmt.Printf("Proving Period Boundary: %d\n", cd.PeriodStart%cd.WPoStProvingPeriod)
 	fmt.Printf("Proving Period Start:    %s\n", EpochTime(cd.CurrentEpoch, cd.PeriodStart))
 	fmt.Printf("Next Period Start:       %s\n\n", EpochTime(cd.CurrentEpoch, cd.PeriodStart+cd.WPoStProvingPeriod))
 
-	fmt.Printf("Faults:      %d (%.2f%%)\n", faults, faultPerc)
-	fmt.Printf("Recovering:  %d\n", recovering)
-
 	fmt.Printf("Deadline Index:       %d\n", cd.Index)
-	fmt.Printf("Deadline Sectors:     %d\n", curDeadlineSectors)
 	fmt.Printf("Deadline Open:        %s\n", EpochTime(cd.CurrentEpoch, cd.Open))
 	fmt.Printf("Deadline Close:       %s\n", EpochTime(cd.CurrentEpoch, cd.Close))
 	fmt.Printf("Deadline Challenge:   %s\n", EpochTime(cd.CurrentEpoch, cd.Challenge))
 	fmt.Printf("Deadline FaultCutoff: %s\n", EpochTime(cd.CurrentEpoch, cd.FaultCutoff))
-	return nil
 
+	dl := dline.NewInfo(ts.Height(), 0, ts.Height(), miner.WPoStPeriodDeadlines, miner.WPoStProvingPeriod, miner.WPoStChallengeWindow, miner.WPoStChallengeLookback, miner.FaultDeclarationCutoff)
+	fmt.Printf("deadline info for deadline 0: %v", dl)
+
+	return nil
 }
