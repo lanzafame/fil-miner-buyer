@@ -216,10 +216,20 @@ func (s *Service) GetMinerProvingInfo(ctx context.Context) error {
 		return err
 	}
 
-	cd, err := s.api.StateMinerProvingDeadline(ctx, maddr, head.Key())
+	ts, err := s.api.ChainGetTipSet(ctx, head.Key())
 	if err != nil {
-		return xerrors.Errorf("getting miner info: %w", err)
+		return xerrors.Errorf("loading tipset %s: %w", head.Key(), err)
 	}
+
+	cd, err := mas.DeadlineInfo(ts.Height())
+	if err != nil {
+		return xerrors.Errorf("failed to get deadline info: %w", err)
+	}
+
+	// cd, err := s.api.StateMinerProvingDeadline(ctx, maddr, head.Key())
+	// if err != nil {
+	// 	return xerrors.Errorf("getting miner info: %w", err)
+	// }
 
 	fmt.Printf("Miner: %s\n", color.BlueString("%s", maddr))
 
