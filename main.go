@@ -175,7 +175,7 @@ func LotusMinerClient(ctx context.Context) (lotusapi.StorageMiner, jsonrpc.Clien
 	headers := http.Header{"Authorization": []string{"Bearer " + authToken}}
 	addr := os.Getenv("LOTUSMINER_API")
 
-	return client.NewStorageMinerRPCV0(ctx, addr, headers)
+	return client.NewStorageMinerRPCV0(ctx, "ws://"+addr+"/rpc/v0", headers)
 }
 
 func GetMinerAddress(ctx context.Context) (address.Address, error) {
