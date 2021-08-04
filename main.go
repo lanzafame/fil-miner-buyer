@@ -248,6 +248,11 @@ func (s *Service) GetMinerProvingInfo(ctx context.Context) error {
 
 	dl := dline.NewInfo(ts.Height(), 0, ts.Height(), miner.WPoStPeriodDeadlines, miner.WPoStProvingPeriod, miner.WPoStChallengeWindow, miner.WPoStChallengeLookback, miner.FaultDeclarationCutoff)
 	fmt.Printf("deadline info for deadline 0: %v", dl)
+	fmt.Printf("Deadline Index:       %d\n", dl.Index)
+	fmt.Printf("Deadline Open:        %s\n", EpochTime(dl.CurrentEpoch, dl.Open))
+	fmt.Printf("Deadline Close:       %s\n", EpochTime(dl.CurrentEpoch, dl.Close))
+	fmt.Printf("Deadline Challenge:   %s\n", EpochTime(dl.CurrentEpoch, dl.Challenge))
+	fmt.Printf("Deadline FaultCutoff: %s\n", EpochTime(dl.CurrentEpoch, dl.FaultCutoff))
 
 	return nil
 }
