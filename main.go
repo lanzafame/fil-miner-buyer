@@ -8,14 +8,22 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/fatih/color"
+	"github.com/filecoin-project/go-address"
 	jsonrpc "github.com/filecoin-project/go-jsonrpc"
 	lotusapi "github.com/filecoin-project/lotus/api"
+	"github.com/filecoin-project/lotus/api/client"
+	"github.com/filecoin-project/lotus/blockstore"
+	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
+	"github.com/filecoin-project/lotus/chain/store"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/specs-actors/actors/builtin"
+	"github.com/urfave/cli/v2"
+	"golang.org/x/xerrors"
 )
 
 type Service struct {
-	api    lotusapi.FullNodeStruct
+	api    lotusapi.FullNode
 	closer jsonrpc.ClientCloser
 
 	threshold types.FIL
@@ -40,24 +48,64 @@ func NewService(ctx context.Context, threshold string) *Service {
 }
 
 func main() {
-	ctx := context.Background()
-
-	threshold := os.Getenv("THRESHOLD")
-	svc := NewService(ctx, threshold)
-
-	if svc.IsGasPriceBelowThreshold(ctx) {
-		worker, err := svc.CreateBLSWallet(ctx)
-		if err != nil {
-			log.Fatalf("creating BLS wallet failed: %s", err)
-		}
-		log.Println(worker)
-		log.Println("initing miner")
-		err = svc.InitMiner(ctx, worker)
-		if err != nil {
-			log.Fatalf("init miner failed: %s", err)
-		}
+	local := []*cli.Command{
+		buyCmd,
+		infoCmd,
 	}
 
+	app := &cli.App{
+		Name:     "fil-miner-buyer",
+		Commands: local,
+	}
+	app.Setup()
+
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+var infoCmd = &cli.Command{
+	Name: "info",
+	Action: func(c *cli.Context) error {
+		ctx := context.Background()
+
+		threshold := os.Getenv("THRESHOLD")
+		svc := NewService(ctx, threshold)
+
+		err := svc.GetMinerProvingInfo(ctx)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	},
+}
+
+var buyCmd = &cli.Command{
+	Name: "buy",
+	Action: func(c *cli.Context) error {
+		ctx := context.Background()
+
+		threshold := os.Getenv("THRESHOLD")
+		svc := NewService(ctx, threshold)
+
+		if svc.IsGasPriceBelowThreshold(ctx) {
+			worker, err := svc.CreateBLSWallet(ctx)
+			if err != nil {
+				log.Fatalf("creating BLS wallet failed: %s", err)
+				return err
+			}
+			log.Println(worker)
+			log.Println("initing miner")
+			err = svc.InitMiner(ctx, worker)
+			if err != nil {
+				log.Fatalf("init miner failed: %s", err)
+				return err
+			}
+		}
+		return nil
+	},
 }
 
 // InitMiner uses the lotus-miner cli to initialize a miner
@@ -109,7 +157,7 @@ func (s *Service) GetGasPrice(ctx context.Context) (int64, error) {
 }
 
 // LotusClient returns a JSONRPC client for the Lotus API
-func LotusClient(ctx context.Context) (lotusapi.FullNodeStruct, jsonrpc.ClientCloser, error) {
+func LotusClient(ctx context.Context) (lotusapi.FullNode, jsonrpc.ClientCloser, error) {
 	authToken := os.Getenv("LOTUS_TOKEN")
 	headers := http.Header{"Authorization": []string{"Bearer " + authToken}}
 	addr := os.Getenv("LOTUS_API")
@@ -117,5 +165,122 @@ func LotusClient(ctx context.Context) (lotusapi.FullNodeStruct, jsonrpc.ClientCl
 	var api lotusapi.FullNodeStruct
 	closer, err := jsonrpc.NewMergeClient(ctx, "ws://"+addr+"/rpc/v0", "Filecoin", []interface{}{&api.Internal, &api.CommonStruct.Internal}, headers)
 
-	return api, closer, err
+	return &api, closer, err
+}
+
+func LotusMinerClient(ctx context.Context) (lotusapi.StorageMiner, jsonrpc.ClientCloser, error) {
+	authToken := os.Getenv("LOTUSMINER_TOKEN")
+	headers := http.Header{"Authorization": []string{"Bearer " + authToken}}
+	addr := os.Getenv("LOTUSMINER_API")
+
+	return client.NewStorageMinerRPCV0(ctx, addr, headers)
+}
+
+func GetMinerAddress(ctx context.Context) (address.Address, error) {
+	miner, closer, err := LotusMinerClient(ctx)
+	if err != nil {
+		return address.Address{}, err
+	}
+	defer closer()
+
+	maddr, err := miner.ActorAddress(ctx)
+	if err != nil {
+		return address.Address{}, err
+	}
+
+	return maddr, nil
+}
+
+func (s *Service) GetMinerProvingInfo(ctx context.Context) error {
+	head, err := s.api.ChainHead(ctx)
+	if err != nil {
+		return xerrors.Errorf("getting chain head: %w", err)
+	}
+
+	maddr, err := GetMinerAddress(ctx)
+	if err != nil {
+		return err
+	}
+
+	mact, err := s.api.StateGetActor(ctx, maddr, head.Key())
+	if err != nil {
+		return err
+	}
+
+	stor := store.ActorStore(ctx, blockstore.NewAPIBlockstore(s.api))
+
+	mas, err := miner.Load(stor, mact)
+	if err != nil {
+		return err
+	}
+
+	cd, err := s.api.StateMinerProvingDeadline(ctx, maddr, head.Key())
+	if err != nil {
+		return xerrors.Errorf("getting miner info: %w", err)
+	}
+
+	fmt.Printf("Miner: %s\n", color.BlueString("%s", maddr))
+
+	proving := uint64(0)
+	faults := uint64(0)
+	recovering := uint64(0)
+	curDeadlineSectors := uint64(0)
+
+	if err := mas.ForEachDeadline(func(dlIdx uint64, dl miner.Deadline) error {
+		return dl.ForEachPartition(func(partIdx uint64, part miner.Partition) error {
+			if bf, err := part.LiveSectors(); err != nil {
+				return err
+			} else if count, err := bf.Count(); err != nil {
+				return err
+			} else {
+				proving += count
+				if dlIdx == cd.Index {
+					curDeadlineSectors += count
+				}
+			}
+
+			if bf, err := part.FaultySectors(); err != nil {
+				return err
+			} else if count, err := bf.Count(); err != nil {
+				return err
+			} else {
+				faults += count
+			}
+
+			if bf, err := part.RecoveringSectors(); err != nil {
+				return err
+			} else if count, err := bf.Count(); err != nil {
+				return err
+			} else {
+				recovering += count
+			}
+
+			return nil
+		})
+	}); err != nil {
+		return xerrors.Errorf("walking miner deadlines and partitions: %w", err)
+	}
+
+	var faultPerc float64
+	if proving > 0 {
+		faultPerc = float64(faults*10000/proving) / 100
+	}
+
+	fmt.Printf("Current Epoch:           %d\n", cd.CurrentEpoch)
+
+	fmt.Printf("Proving Period Boundary: %d\n", cd.PeriodStart%cd.WPoStProvingPeriod)
+	fmt.Printf("Proving Period Start:    %s\n", EpochTime(cd.CurrentEpoch, cd.PeriodStart))
+	fmt.Printf("Next Period Start:       %s\n\n", EpochTime(cd.CurrentEpoch, cd.PeriodStart+cd.WPoStProvingPeriod))
+
+	fmt.Printf("Faults:      %d (%.2f%%)\n", faults, faultPerc)
+	fmt.Printf("Recovering:  %d\n", recovering)
+
+	fmt.Printf("Deadline Index:       %d\n", cd.Index)
+	fmt.Printf("Deadline Sectors:     %d\n", curDeadlineSectors)
+	fmt.Printf("Deadline Open:        %s\n", EpochTime(cd.CurrentEpoch, cd.Open))
+	fmt.Printf("Deadline Close:       %s\n", EpochTime(cd.CurrentEpoch, cd.Close))
+	fmt.Printf("Deadline Challenge:   %s\n", EpochTime(cd.CurrentEpoch, cd.Challenge))
+	fmt.Printf("Deadline FaultCutoff: %s\n", EpochTime(cd.CurrentEpoch, cd.FaultCutoff))
+	return nil
+
 }
