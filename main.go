@@ -156,7 +156,7 @@ var backupCmd = &cli.Command{
 			return err
 		}
 
-		err = svc.RemoveMinerDir(ctx)
+		err = svc.RemoveMinerDir(ctx, worker)
 		if err != nil {
 			log.Printf("removing miner dir failed: %s", err)
 			return err
@@ -234,7 +234,7 @@ var buyCmd = &cli.Command{
 				return err
 			}
 
-			err = svc.RemoveMinerDir(ctx)
+			err = svc.RemoveMinerDir(ctx, worker)
 			if err != nil {
 				log.Printf("removing miner dir failed: %s", err)
 				return err
@@ -307,14 +307,14 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) er
 }
 
 // RemoveMinerDir removes the miner directory
-func (svc *Service) RemoveMinerDir(ctx context.Context) error {
+func (svc *Service) RemoveMinerDir(ctx context.Context, worker string) error {
 	h, err := homedir.Dir()
 	if err != nil {
 		log.Printf("getting home directory failed: %s", err)
 		return err
 	}
 
-	err = os.RemoveAll(home(h, ".lotusminer"))
+	err = os.Rename(home(h, ".lotusminer"), home(h, ".lotusbackup/%s/lotusminer"))
 	if err != nil {
 		log.Printf("error removing lotusminer directory: %s", err)
 		return err
