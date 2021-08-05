@@ -197,6 +197,7 @@ var buyCmd = &cli.Command{
 func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) error {
 	h, err := homedir.Dir()
 	if err != nil {
+		log.Fatalf("getting home directory failed: %s", err)
 		return err
 	}
 
@@ -204,22 +205,26 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) er
 	if inTZ == 1 {
 		err = AppendFile(home(h, "keepminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
 		if err != nil {
+			log.Printf("error appending worker to keepminer.list: %s", err)
 			return err
 		}
 	} else if inTZ == 0 {
 		err = AppendFile(home(h, "sellminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
 		if err != nil {
+			log.Printf("error appending worker to sellminer.list: %s", err)
 			return err
 		}
 	} else {
 		err = AppendFile(home(h, "backupminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
 		if err != nil {
+			log.Printf("error appending worker to backupminer.list: %s", err)
 			return err
 		}
 	}
 
 	err = os.MkdirAll(fmt.Sprintf(home(h, ".lotusbackup/%s"), worker), 0755)
 	if err != nil {
+		log.Printf("error creating lotusbackup directory: %s", err)
 		return err
 	}
 
@@ -228,6 +233,7 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) er
 		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 		err = cmd.Run()
 		if err != nil {
+			log.Printf("error running lotus-miner backup: %s", err)
 			return err
 		}
 	}
@@ -236,16 +242,19 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) er
 		args := []string{"wallet", "export", worker}
 		out, err := exec.Command("lotus", args...).Output()
 		if err != nil {
+			log.Printf("error running lotus wallet export: %s", err)
 			return err
 		}
 		err = ioutil.WriteFile(fmt.Sprintf(home(h, ".lotusbackup/%s/key"), worker), out, 0644)
 		if err != nil {
+			log.Printf("error writing wallet export: %s", err)
 			return err
 		}
 	}
 
 	err = os.RemoveAll(home(h, ".lotusminer"))
 	if err != nil {
+		log.Printf("error removing lotusminer directory: %s", err)
 		return err
 	}
 
