@@ -314,7 +314,10 @@ func (svc *Service) RemoveMinerDir(ctx context.Context, worker string) error {
 		return err
 	}
 
-	err = os.Rename(home(h, ".lotusminer"), home(h, ".lotusbackup/%s/lotusminer"))
+	minerpath := home(h, fmt.Sprintf(".lotusminer-%s", worker))
+	backuppath := home(h, fmt.Sprintf(".lotusbackup/%s/lotusminer", worker))
+
+	err = os.Rename(minerpath, backuppath)
 	if err != nil {
 		log.Printf("error removing lotusminer directory: %s", err)
 		return err
@@ -327,11 +330,20 @@ func (svc *Service) RemoveMinerDir(ctx context.Context, worker string) error {
 func (s *Service) InitMiner(ctx context.Context, worker string) error {
 	args := []string{"init", "--owner=" + s.owner, "--worker=" + worker, "--no-local-storage"}
 
+	h, err := homedir.Dir()
+	if err != nil {
+		log.Printf("getting home directory failed: %s", err)
+		return err
+	}
+
+	minerpath := home(h, fmt.Sprintf(".lotusminer-%s", worker))
+	minerpathenv := fmt.Sprintf("LOTUS_MINER_PATH=%s", minerpath)
+
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
-	cmd.Env = append(os.Environ(), "TRUST_PARAMS=1")
+	cmd.Env = append(os.Environ(), minerpathenv, "TRUST_PARAMS=1")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		return err
 	}
