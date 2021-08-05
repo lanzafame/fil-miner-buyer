@@ -212,11 +212,6 @@ var buyCmd = &cli.Command{
 			}
 			zerothDeadline := GetZerothDeadlineFromCurrentDeadline(cd)
 
-			err = svc.StopMiner(ctx)
-			if err != nil {
-				log.Printf("stopping miner failed: %s", err)
-				return err
-			}
 			// if the zeroth deadline is between the time range set, backup miner
 			if zerothDeadline.Hour() <= svc.start.Hour() && zerothDeadline.Hour() >= svc.finish.Hour() {
 				log.Println("backing up miner; in tz")
@@ -233,7 +228,17 @@ var buyCmd = &cli.Command{
 					return err
 				}
 			}
-			svc.RemoveMinerDir(ctx)
+			err = svc.StopMiner(ctx)
+			if err != nil {
+				log.Printf("stopping miner failed: %s", err)
+				return err
+			}
+
+			err = svc.RemoveMinerDir(ctx)
+			if err != nil {
+				log.Printf("removing miner dir failed: %s", err)
+				return err
+			}
 		}
 		return nil
 	},
