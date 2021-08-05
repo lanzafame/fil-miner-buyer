@@ -179,6 +179,11 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ bool) e
 		}
 	}
 
+	err = os.Mkdir(fmt.Sprintf("~/.lotusbackup/%s", worker), 0755)
+	if err != nil {
+		return err
+	}
+
 	{
 		args := []string{"backup", fmt.Sprintf("~/.lotusbackup/%s/bak", worker)}
 		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
