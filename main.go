@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"time"
 
-	"github.com/fatih/color"
 	"github.com/filecoin-project/go-address"
 	jsonrpc "github.com/filecoin-project/go-jsonrpc"
+	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/dline"
 	lotusapi "github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
@@ -52,6 +53,7 @@ func main() {
 	local := []*cli.Command{
 		buyCmd,
 		infoCmd,
+		outputCmd,
 	}
 
 	app := &cli.App{
@@ -66,6 +68,16 @@ func main() {
 
 }
 
+var outputCmd = &cli.Command{
+	Name: "output",
+	Action: func(c *cli.Context) error {
+		t := time.Unix(1598306400, 0)
+		fmt.Println(t.String())
+		fmt.Println(EpochTimestamp(abi.ChainEpoch(994203)).String())
+		return nil
+	},
+}
+
 var infoCmd = &cli.Command{
 	Name: "info",
 	Action: func(c *cli.Context) error {
@@ -74,10 +86,12 @@ var infoCmd = &cli.Command{
 		threshold := os.Getenv("THRESHOLD")
 		svc := NewService(ctx, threshold)
 
-		err := svc.GetMinerProvingInfo(ctx)
+		cd, err := svc.GetMinerProvingInfo(ctx)
 		if err != nil {
 			return err
 		}
+
+		fmt.Println(GetZerothDeadlineFromCurrentDeadline(cd).String())
 
 		return nil
 	},
@@ -194,65 +208,46 @@ func GetMinerAddress(ctx context.Context) (address.Address, error) {
 	return maddr, nil
 }
 
-func (s *Service) GetMinerProvingInfo(ctx context.Context) error {
+func (s *Service) GetMinerProvingInfo(ctx context.Context) (*dline.Info, error) {
 	head, err := s.api.ChainHead(ctx)
 	if err != nil {
-		return xerrors.Errorf("getting chain head: %w", err)
+		return nil, xerrors.Errorf("getting chain head: %w", err)
 	}
 
 	maddr, err := GetMinerAddress(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	mact, err := s.api.StateGetActor(ctx, maddr, head.Key())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	stor := store.ActorStore(ctx, blockstore.NewAPIBlockstore(s.api))
 
 	mas, err := miner.Load(stor, mact)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ts, err := s.api.ChainGetTipSet(ctx, head.Key())
 	if err != nil {
-		return xerrors.Errorf("loading tipset %s: %w", head.Key(), err)
+		return nil, xerrors.Errorf("loading tipset %s: %w", head.Key(), err)
 	}
 
 	cd, err := mas.DeadlineInfo(ts.Height())
 	if err != nil {
-		return xerrors.Errorf("failed to get deadline info: %w", err)
+		return nil, xerrors.Errorf("failed to get deadline info: %w", err)
 	}
 
-	// cd, err := s.api.StateMinerProvingDeadline(ctx, maddr, head.Key())
-	// if err != nil {
-	// 	return xerrors.Errorf("getting miner info: %w", err)
-	// }
+	return cd, nil
+}
 
-	fmt.Printf("Miner: %s\n", color.BlueString("%s", maddr))
+// GetZerothDeadlineFromCurrentDeadline returns the hour of day that the zeroth deadline
+// gets challenged
+func GetZerothDeadlineFromCurrentDeadline(dl *dline.Info) time.Time {
+	di0do := dl.CurrentEpoch - (dl.CurrentEpoch - dl.Open + abi.ChainEpoch(int64(dl.Index)*int64(miner.WPoStChallengeWindow)))
 
-	fmt.Printf("Current Epoch:           %d\n", cd.CurrentEpoch)
-
-	fmt.Printf("Proving Period Boundary: %d\n", cd.PeriodStart%cd.WPoStProvingPeriod)
-	fmt.Printf("Proving Period Start:    %s\n", EpochTime(cd.CurrentEpoch, cd.PeriodStart))
-	fmt.Printf("Next Period Start:       %s\n\n", EpochTime(cd.CurrentEpoch, cd.PeriodStart+cd.WPoStProvingPeriod))
-
-	fmt.Printf("Deadline Index:       %d\n", cd.Index)
-	fmt.Printf("Deadline Open:        %s\n", EpochTime(cd.CurrentEpoch, cd.Open))
-	fmt.Printf("Deadline Close:       %s\n", EpochTime(cd.CurrentEpoch, cd.Close))
-	fmt.Printf("Deadline Challenge:   %s\n", EpochTime(cd.CurrentEpoch, cd.Challenge))
-	fmt.Printf("Deadline FaultCutoff: %s\n", EpochTime(cd.CurrentEpoch, cd.FaultCutoff))
-
-	dl := dline.NewInfo(ts.Height(), 0, ts.Height(), miner.WPoStPeriodDeadlines, miner.WPoStProvingPeriod, miner.WPoStChallengeWindow, miner.WPoStChallengeLookback, miner.FaultDeclarationCutoff)
-	fmt.Printf("deadline info for deadline 0: %v", dl)
-	fmt.Printf("Deadline Index:       %d\n", dl.Index)
-	fmt.Printf("Deadline Open:        %s\n", EpochTime(dl.CurrentEpoch, dl.Open))
-	fmt.Printf("Deadline Close:       %s\n", EpochTime(dl.CurrentEpoch, dl.Close))
-	fmt.Printf("Deadline Challenge:   %s\n", EpochTime(dl.CurrentEpoch, dl.Challenge))
-	fmt.Printf("Deadline FaultCutoff: %s\n", EpochTime(dl.CurrentEpoch, dl.FaultCutoff))
-
-	return nil
+	return EpochTimestamp(di0do)
 }

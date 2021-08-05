@@ -9,7 +9,9 @@ import (
 	"github.com/hako/durafmt"
 )
 
-func EpochTime(curr, e abi.ChainEpoch) string {
+var genesisUnixTimestamp = time.Unix(1598306400, 0)
+
+func EpochTimeStr(curr, e abi.ChainEpoch) string {
 	switch {
 	case curr > e:
 		return fmt.Sprintf("%d (%s ago)", e, durafmt.Parse(time.Second*time.Duration(int64(build.BlockDelaySecs)*int64(curr-e))).LimitFirstN(2))
@@ -20,4 +22,16 @@ func EpochTime(curr, e abi.ChainEpoch) string {
 	}
 
 	panic("math broke")
+}
+
+func EpochTime(curr, e abi.ChainEpoch) time.Duration {
+	return durafmt.Parse(time.Second * time.Duration(int64(build.BlockDelaySecs)*int64(curr-e))).LimitFirstN(2).Duration()
+}
+
+func EpochTimestamp(e abi.ChainEpoch) time.Time {
+	return genesisUnixTimestamp.Add(DurationSinceGenesis(e))
+}
+
+func DurationSinceGenesis(e abi.ChainEpoch) time.Duration {
+	return durafmt.Parse(time.Second * time.Duration(int64(build.BlockDelaySecs)*int64(e))).LimitFirstN(2).Duration()
 }
