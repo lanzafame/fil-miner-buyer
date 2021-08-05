@@ -176,6 +176,10 @@ var buyCmd = &cli.Command{
 			}
 			zerothDeadline := GetZerothDeadlineFromCurrentDeadline(cd)
 
+			err = svc.StopMiner(ctx)
+			if err != nil {
+				return err
+			}
 			// if the zeroth deadline is between the time range set, backup miner
 			if zerothDeadline.Hour() <= svc.start.Hour() && zerothDeadline.Hour() >= svc.finish.Hour() {
 				log.Println("backing up miner; in tz")
@@ -191,11 +195,6 @@ var buyCmd = &cli.Command{
 
 // BackupMiner creates a backup of the miner
 func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) error {
-	err := svc.StopMiner(ctx)
-	if err != nil {
-		return err
-	}
-
 	h, err := homedir.Dir()
 	if err != nil {
 		return err
