@@ -35,6 +35,8 @@ type Service struct {
 	finish    time.Time
 
 	owner string
+
+	h string
 }
 
 func NewService(ctx context.Context, threshold string) *Service {
@@ -53,7 +55,12 @@ func NewService(ctx context.Context, threshold string) *Service {
 	start, _ := time.Parse(time.Kitchen, "9:00AM")
 	finish, _ := time.Parse(time.Kitchen, "5:00PM")
 
-	return &Service{api: api, closer: closer, threshold: thresholdFIL, start: start, finish: finish, owner: owner}
+	h, err := homedir.Dir()
+	if err != nil {
+		log.Printf("getting home directory failed: %s", err)
+	}
+
+	return &Service{api: api, closer: closer, threshold: thresholdFIL, start: start, finish: finish, owner: owner, h: h}
 }
 
 func main() {
@@ -105,7 +112,7 @@ var infoCmd = &cli.Command{
 			return err
 		}
 
-		err = svc.StartMiner(ctx)
+		err = svc.StartMiner(ctx, worker)
 		if err != nil {
 			log.Printf("starting miner failed: %s", err)
 			return err
@@ -142,14 +149,14 @@ var backupCmd = &cli.Command{
 		if c.Args().Len() < 1 {
 			return fmt.Errorf("please provide a worker address to backup")
 		}
+		worker := c.Args().First()
 
-		err := svc.StartMiner(ctx)
+		err := svc.StartMiner(ctx, worker)
 		if err != nil {
 			log.Printf("starting miner failed: %s", err)
 			return err
 		}
 
-		worker := c.Args().First()
 		err = svc.BackupMiner(ctx, worker, 2)
 		if err != nil {
 			log.Printf("backing up miner failed: %s", err)
@@ -192,7 +199,7 @@ var buyCmd = &cli.Command{
 			}
 
 			// start lotus-miner process with TRUST_PARAMS=1
-			err = svc.StartMiner(ctx)
+			err = svc.StartMiner(ctx, worker)
 			if err != nil {
 				log.Printf("starting miner failed: %s", err)
 				return err
@@ -245,42 +252,37 @@ var buyCmd = &cli.Command{
 }
 
 // BackupMiner creates a backup of the miner
-func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) error {
-	h, err := homedir.Dir()
-	if err != nil {
-		log.Printf("getting home directory failed: %s", err)
-		return err
-	}
-
+func (s *Service) BackupMiner(ctx context.Context, worker string, inTZ int) error {
+	var err error
 	// write worker address to file
 	if inTZ == 1 {
-		err = AppendFile(home(h, "keepminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
+		err = AppendFile(home(s.h, "keepminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
 		if err != nil {
 			log.Printf("error appending worker to keepminer.list: %s", err)
 			return err
 		}
 	} else if inTZ == 0 {
-		err = AppendFile(home(h, "sellminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
+		err = AppendFile(home(s.h, "sellminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
 		if err != nil {
 			log.Printf("error appending worker to sellminer.list: %s", err)
 			return err
 		}
 	} else {
-		err = AppendFile(home(h, "backupminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
+		err = AppendFile(home(s.h, "backupminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
 		if err != nil {
 			log.Printf("error appending worker to backupminer.list: %s", err)
 			return err
 		}
 	}
 
-	err = os.MkdirAll(fmt.Sprintf(home(h, ".lotusbackup/%s"), worker), 0755)
+	err = os.MkdirAll(fmt.Sprintf(home(s.h, ".lotusbackup/%s"), worker), 0755)
 	if err != nil {
 		log.Printf("error creating lotusbackup directory: %s", err)
 		return err
 	}
 
 	{
-		args := []string{"backup", fmt.Sprintf(home(h, ".lotusbackup/%s/bak"), worker)}
+		args := []string{"backup", fmt.Sprintf(home(s.h, ".lotusbackup/%s/bak"), worker)}
 		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 		err = cmd.Run()
 		if err != nil {
@@ -296,7 +298,7 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) er
 			log.Printf("error running lotus wallet export: %s", err)
 			return err
 		}
-		err = ioutil.WriteFile(fmt.Sprintf(home(h, ".lotusbackup/%s/key"), worker), out, 0644)
+		err = ioutil.WriteFile(fmt.Sprintf(home(s.h, ".lotusbackup/%s/key"), worker), out, 0644)
 		if err != nil {
 			log.Printf("error writing wallet export: %s", err)
 			return err
@@ -307,17 +309,11 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) er
 }
 
 // RemoveMinerDir removes the miner directory
-func (svc *Service) RemoveMinerDir(ctx context.Context, worker string) error {
-	h, err := homedir.Dir()
-	if err != nil {
-		log.Printf("getting home directory failed: %s", err)
-		return err
-	}
+func (s *Service) RemoveMinerDir(ctx context.Context, worker string) error {
+	minerpath := home(s.h, fmt.Sprintf(".lotusminer-%s", worker))
+	backuppath := home(s.h, fmt.Sprintf(".lotusbackup/%s/lotusminer", worker))
 
-	minerpath := home(h, fmt.Sprintf(".lotusminer-%s", worker))
-	backuppath := home(h, fmt.Sprintf(".lotusbackup/%s/lotusminer", worker))
-
-	err = os.Rename(minerpath, backuppath)
+	err := os.Rename(minerpath, backuppath)
 	if err != nil {
 		log.Printf("error removing lotusminer directory: %s", err)
 		return err
@@ -352,25 +348,20 @@ func (s *Service) InitMiner(ctx context.Context, worker string) error {
 
 // RestoreMiner uses the lotus-miner cli to initialize a miner
 func (s *Service) RestoreMiner(ctx context.Context, worker string) error {
-	h, err := homedir.Dir()
-	if err != nil {
-		log.Printf("getting home directory failed: %s", err)
-		return err
-	}
-
+	minerpath := home(s.h, fmt.Sprintf(".lotusminer-%s", worker))
 	// confirm that there is no lotusminer directory
-	if _, err := os.Stat(home(h, ".lotusminer")); err == nil {
+	if _, err := os.Stat(minerpath); err == nil {
 		log.Printf("error: lotusminer directory already exists")
 		return err
 	}
 
-	args := []string{"init", "restore", fmt.Sprintf(home(h, ".lotusbackup/%s/bak"), worker)}
+	args := []string{"init", "restore", fmt.Sprintf(home(s.h, ".lotusbackup/%s/bak"), worker)}
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	cmd.Env = append(os.Environ(), "TRUST_PARAMS=1")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
 		return err
 	}
@@ -378,11 +369,14 @@ func (s *Service) RestoreMiner(ctx context.Context, worker string) error {
 }
 
 // StartMiner uses the lotus-miner cli to start a miner
-func (s *Service) StartMiner(ctx context.Context) error {
+func (s *Service) StartMiner(ctx context.Context, worker string) error {
 	args := []string{"run"}
 
+	minerpath := home(s.h, fmt.Sprintf(".lotusminer-%s", worker))
+	minerpathenv := fmt.Sprintf("LOTUS_MINER_PATH=%s", minerpath)
+
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
-	cmd.Env = append(os.Environ(), "TRUST_PARAMS=1")
+	cmd.Env = append(os.Environ(), minerpathenv, "TRUST_PARAMS=1")
 	cmd.Stdout = ioutil.Discard
 	cmd.Stderr = ioutil.Discard
 	err := cmd.Start()
