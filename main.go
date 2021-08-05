@@ -198,7 +198,7 @@ var buyCmd = &cli.Command{
 				return err
 			}
 
-			// start lotus-miner process with TRUST_PARAMS=1
+			log.Println("starting miner")
 			err = svc.StartMiner(ctx, worker)
 			if err != nil {
 				log.Printf("starting miner failed: %s", err)
@@ -235,12 +235,15 @@ var buyCmd = &cli.Command{
 					return err
 				}
 			}
+
+			log.Printf("stopping miner")
 			err = svc.StopMiner(ctx, worker)
 			if err != nil {
 				log.Printf("stopping miner failed: %s", err)
 				return err
 			}
 
+			log.Printf("moving miner dir")
 			err = svc.RemoveMinerDir(ctx, worker)
 			if err != nil {
 				log.Printf("removing miner dir failed: %s", err)
@@ -340,8 +343,8 @@ func (s *Service) InitMiner(ctx context.Context, worker string) error {
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	cmd.Env = append(os.Environ(), minerpathenv, "TRUST_PARAMS=1")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = ioutil.Discard
+	cmd.Stderr = ioutil.Discard
 	err = cmd.Run()
 	if err != nil {
 		return err
