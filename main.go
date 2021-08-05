@@ -140,25 +140,27 @@ var buyCmd = &cli.Command{
 		if svc.IsGasPriceBelowThreshold(ctx) {
 			worker, err := svc.CreateBLSWallet(ctx)
 			if err != nil {
-				log.Fatalf("creating BLS wallet failed: %s", err)
+				log.Printf("creating BLS wallet failed: %s", err)
 				return err
 			}
 			log.Println(worker)
 			log.Println("initing miner")
 			err = svc.InitMiner(ctx, worker)
 			if err != nil {
-				log.Fatalf("init miner failed: %s", err)
+				log.Printf("init miner failed: %s", err)
 				return err
 			}
 
 			// start lotus-miner process with TRUST_PARAMS=1
 			err = svc.StartMiner(ctx)
 			if err != nil {
+				log.Printf("starting miner failed: %s", err)
 				return err
 			}
 
 			tokenPath, err := homedir.Expand("~/.lotusminer/token")
 			if err != nil {
+				log.Printf("expanding token path failed: %s", err)
 				return err
 			}
 
@@ -172,21 +174,31 @@ var buyCmd = &cli.Command{
 			// get the timestamp of the zeroth deadline
 			cd, err := svc.GetMinerProvingInfo(ctx)
 			if err != nil {
+				log.Printf("getting miner proving info failed: %s", err)
 				return err
 			}
 			zerothDeadline := GetZerothDeadlineFromCurrentDeadline(cd)
 
 			err = svc.StopMiner(ctx)
 			if err != nil {
+				log.Printf("stopping miner failed: %s", err)
 				return err
 			}
 			// if the zeroth deadline is between the time range set, backup miner
 			if zerothDeadline.Hour() <= svc.start.Hour() && zerothDeadline.Hour() >= svc.finish.Hour() {
 				log.Println("backing up miner; in tz")
-				svc.BackupMiner(ctx, worker, 1)
+				err = svc.BackupMiner(ctx, worker, 1)
+				if err != nil {
+					log.Printf("backing up keep miner failed: %s", err)
+					return err
+				}
 			} else {
 				log.Println("backing up miner; not in tz")
 				svc.BackupMiner(ctx, worker, 0)
+				if err != nil {
+					log.Printf("backing up sell miner failed: %s", err)
+					return err
+				}
 			}
 		}
 		return nil
@@ -197,7 +209,7 @@ var buyCmd = &cli.Command{
 func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) error {
 	h, err := homedir.Dir()
 	if err != nil {
-		log.Fatalf("getting home directory failed: %s", err)
+		log.Printf("getting home directory failed: %s", err)
 		return err
 	}
 
