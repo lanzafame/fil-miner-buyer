@@ -229,10 +229,12 @@ func (s *Service) InitMiner(ctx context.Context, worker string) error {
 
 // StartMiner uses the lotus-miner cli to start a miner
 func (s *Service) StartMiner(ctx context.Context) error {
-	os.Setenv("TRUST_PARAMS", "1")
 	args := []string{"run"}
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
+	cmd.Env = append(os.Environ(),
+		"TRUST_PARAMS=1",
+	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Start()
