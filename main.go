@@ -188,7 +188,7 @@ var buyCmd = &cli.Command{
 				log.Printf("reading token failed: %s", err)
 				return err
 			}
-			os.Setenv("MINER_TOKEN", string(content))
+			os.Setenv("LOTUSMINER_TOKEN", string(content))
 
 			// get the timestamp of the zeroth deadline
 			cd, err := svc.GetMinerProvingInfo(ctx)
