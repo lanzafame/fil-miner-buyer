@@ -143,11 +143,26 @@ var backupCmd = &cli.Command{
 			return fmt.Errorf("please provide a worker address to backup")
 		}
 
-		worker := c.Args().First()
-		err := svc.BackupMiner(ctx, worker, 2)
+		err := svc.StartMiner(ctx)
 		if err != nil {
+			log.Printf("starting miner failed: %s", err)
 			return err
 		}
+
+		worker := c.Args().First()
+		err = svc.BackupMiner(ctx, worker, 2)
+		if err != nil {
+			log.Printf("backing up miner failed: %s", err)
+			return err
+		}
+
+		err = svc.RemoveMinerDir(ctx)
+		if err != nil {
+			log.Printf("removing miner dir failed: %s", err)
+			return err
+		}
+
+		svc.StopMiner(ctx)
 
 		return nil
 	},
@@ -218,6 +233,7 @@ var buyCmd = &cli.Command{
 					return err
 				}
 			}
+			svc.RemoveMinerDir(ctx)
 		}
 		return nil
 	},
@@ -280,6 +296,17 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) er
 			log.Printf("error writing wallet export: %s", err)
 			return err
 		}
+	}
+
+	return nil
+}
+
+// RemoveMinerDir removes the miner directory
+func (svc *Service) RemoveMinerDir(ctx context.Context) error {
+	h, err := homedir.Dir()
+	if err != nil {
+		log.Printf("getting home directory failed: %s", err)
+		return err
 	}
 
 	err = os.RemoveAll(home(h, ".lotusminer"))
