@@ -218,6 +218,7 @@ func (s *Service) InitMiner(ctx context.Context, worker string) error {
 	args := []string{"init", "--owner=" + s.owner, "--worker=" + worker, "--no-local-storage"}
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
+	cmd.Env = append(os.Environ(), "TRUST_PARAMS=1")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
@@ -232,9 +233,7 @@ func (s *Service) StartMiner(ctx context.Context) error {
 	args := []string{"run"}
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
-	cmd.Env = append(os.Environ(),
-		"TRUST_PARAMS=1",
-	)
+	cmd.Env = append(os.Environ(), "TRUST_PARAMS=1")
 	cmd.Stdout = ioutil.Discard
 	cmd.Stderr = ioutil.Discard
 	err := cmd.Start()
