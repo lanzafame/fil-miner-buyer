@@ -282,8 +282,11 @@ func (s *Service) BackupMiner(ctx context.Context, worker string, inTZ int) erro
 	}
 
 	{
+		minerpath := home(s.h, fmt.Sprintf(".lotusminer-%s", worker))
+		minerpathenv := fmt.Sprintf("LOTUS_MINER_PATH=%s", minerpath)
 		args := []string{"backup", fmt.Sprintf(home(s.h, ".lotusbackup/%s/bak"), worker)}
 		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
+		cmd.Env = append(os.Environ(), minerpathenv)
 		err = cmd.Run()
 		if err != nil {
 			log.Printf("error running lotus-miner backup: %s", err)
