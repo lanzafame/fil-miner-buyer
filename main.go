@@ -95,7 +95,7 @@ var infoCmd = &cli.Command{
 		svc := NewService(ctx, threshold)
 
 		if c.Args().Len() < 1 {
-			return fmt.Errorf("please provide a worker address to backup")
+			return fmt.Errorf("please provide a worker address")
 		}
 
 		worker := c.Args().First()
@@ -111,6 +111,12 @@ var infoCmd = &cli.Command{
 			return err
 		}
 		defer svc.StopMiner(ctx)
+
+		err = SetMinerToken(ctx)
+		if err != nil {
+			log.Printf("setting miner token failed: %s", err)
+			return err
+		}
 
 		cd, err := svc.GetMinerProvingInfo(ctx)
 		if err != nil {
@@ -177,18 +183,11 @@ var buyCmd = &cli.Command{
 				return err
 			}
 
-			tokenPath, err := homedir.Expand("~/.lotusminer/token")
+			err = SetMinerToken(ctx)
 			if err != nil {
-				log.Printf("expanding token path failed: %s", err)
+				log.Printf("setting miner token failed: %s", err)
 				return err
 			}
-
-			content, err := ioutil.ReadFile(tokenPath)
-			if err != nil {
-				log.Printf("reading token failed: %s", err)
-				return err
-			}
-			os.Setenv("LOTUSMINER_TOKEN", string(content))
 
 			// get the timestamp of the zeroth deadline
 			cd, err := svc.GetMinerProvingInfo(ctx)
@@ -473,4 +472,20 @@ func (s *Service) GetMinerProvingInfo(ctx context.Context) (*dline.Info, error) 
 func GetZerothDeadlineFromCurrentDeadline(dl *dline.Info) time.Time {
 	di0do := dl.CurrentEpoch - (dl.CurrentEpoch - dl.Open + abi.ChainEpoch(int64(dl.Index)*int64(miner.WPoStChallengeWindow)))
 	return EpochTimestamp(di0do)
+}
+
+func SetMinerToken(ctx context.Context) error {
+	tokenPath, err := homedir.Expand("~/.lotusminer/token")
+	if err != nil {
+		log.Printf("expanding token path failed: %s", err)
+		return err
+	}
+
+	content, err := ioutil.ReadFile(tokenPath)
+	if err != nil {
+		log.Printf("reading token failed: %s", err)
+		return err
+	}
+	os.Setenv("LOTUSMINER_TOKEN", string(content))
+	return nil
 }
