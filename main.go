@@ -117,7 +117,7 @@ var infoCmd = &cli.Command{
 			log.Printf("starting miner failed: %s", err)
 			return err
 		}
-		defer svc.StopMiner(ctx)
+		defer svc.StopMiner(ctx, worker)
 
 		err = svc.SetMinerToken(ctx, worker)
 		if err != nil {
@@ -169,7 +169,7 @@ var backupCmd = &cli.Command{
 			return err
 		}
 
-		svc.StopMiner(ctx)
+		svc.StopMiner(ctx, worker)
 
 		return nil
 	},
@@ -235,7 +235,7 @@ var buyCmd = &cli.Command{
 					return err
 				}
 			}
-			err = svc.StopMiner(ctx)
+			err = svc.StopMiner(ctx, worker)
 			if err != nil {
 				log.Printf("stopping miner failed: %s", err)
 				return err
@@ -391,9 +391,14 @@ func (s *Service) StartMiner(ctx context.Context, worker string) error {
 }
 
 // StopMiner uses the lotus-miner cli to stop a miner
-func (s *Service) StopMiner(ctx context.Context) error {
+func (s *Service) StopMiner(ctx context.Context, worker string) error {
 	args := []string{"stop"}
+
+	minerpath := home(s.h, fmt.Sprintf(".lotusminer-%s", worker))
+	minerpathenv := fmt.Sprintf("LOTUS_MINER_PATH=%s", minerpath)
+
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
+	cmd.Env = append(os.Environ(), minerpathenv)
 	err := cmd.Run()
 	if err != nil {
 		return err
