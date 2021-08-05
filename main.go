@@ -210,7 +210,7 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ bool) e
 
 // InitMiner uses the lotus-miner cli to initialize a miner
 func (s *Service) InitMiner(ctx context.Context, worker string) error {
-	args := []string{"--owner=" + s.owner, "--worker=" + worker, "--no-local-storage"}
+	args := []string{"init", "--owner=" + s.owner, "--worker=" + worker, "--no-local-storage"}
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	cmd.Stdout = os.Stdout
