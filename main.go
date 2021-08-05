@@ -119,7 +119,7 @@ var infoCmd = &cli.Command{
 		}
 		defer svc.StopMiner(ctx)
 
-		err = SetMinerToken(ctx)
+		err = svc.SetMinerToken(ctx, worker)
 		if err != nil {
 			log.Printf("setting miner token failed: %s", err)
 			return err
@@ -205,7 +205,7 @@ var buyCmd = &cli.Command{
 				return err
 			}
 
-			err = SetMinerToken(ctx)
+			err = svc.SetMinerToken(ctx, worker)
 			if err != nil {
 				log.Printf("setting miner token failed: %s", err)
 				return err
@@ -510,14 +510,10 @@ func GetZerothDeadlineFromCurrentDeadline(dl *dline.Info) time.Time {
 	return EpochTimestamp(di0do)
 }
 
-func SetMinerToken(ctx context.Context) error {
-	tokenPath, err := homedir.Expand("~/.lotusminer/token")
-	if err != nil {
-		log.Printf("expanding token path failed: %s", err)
-		return err
-	}
+func (s *Service) SetMinerToken(ctx context.Context, worker string) error {
+	minerpath := home(s.h, fmt.Sprintf(".lotusminer-%s", worker))
 
-	content, err := ioutil.ReadFile(tokenPath)
+	content, err := ioutil.ReadFile(fmt.Sprintf("%s/token", minerpath))
 	if err != nil {
 		log.Printf("reading token failed: %s", err)
 		return err
