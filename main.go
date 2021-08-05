@@ -94,8 +94,27 @@ var infoCmd = &cli.Command{
 		threshold := os.Getenv("THRESHOLD")
 		svc := NewService(ctx, threshold)
 
+		if c.Args().Len() < 1 {
+			return fmt.Errorf("please provide a worker address to backup")
+		}
+
+		worker := c.Args().First()
+		err := svc.RestoreMiner(ctx, worker)
+		if err != nil {
+			log.Printf("restoring miner failed: %s", err)
+			return err
+		}
+
+		err = svc.StartMiner(ctx)
+		if err != nil {
+			log.Printf("starting miner failed: %s", err)
+			return err
+		}
+		defer svc.StopMiner(ctx)
+
 		cd, err := svc.GetMinerProvingInfo(ctx)
 		if err != nil {
+			log.Printf("getting miner proving info failed: %s", err)
 			return err
 		}
 
@@ -288,18 +307,48 @@ func (s *Service) InitMiner(ctx context.Context, worker string) error {
 	return nil
 }
 
+// RestoreMiner uses the lotus-miner cli to initialize a miner
+func (s *Service) RestoreMiner(ctx context.Context, worker string) error {
+	h, err := homedir.Dir()
+	if err != nil {
+		log.Printf("getting home directory failed: %s", err)
+		return err
+	}
+
+	// confirm that there is no lotusminer directory
+	if _, err := os.Stat(home(h, ".lotusminer")); err == nil {
+		log.Printf("error: lotusminer directory already exists")
+		return err
+	}
+
+	args := []string{"init", "restore", fmt.Sprintf(home(h, ".lotusbackup/%s/bak"), worker)}
+
+	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
+	cmd.Env = append(os.Environ(), "TRUST_PARAMS=1")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // StartMiner uses the lotus-miner cli to start a miner
 func (s *Service) StartMiner(ctx context.Context) error {
 	args := []string{"run"}
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	cmd.Env = append(os.Environ(), "TRUST_PARAMS=1")
-	cmd.Stdout = ioutil.Discard
-	cmd.Stderr = ioutil.Discard
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	// cmd.Stdout = ioutil.Discard
+	// cmd.Stderr = ioutil.Discard
 	err := cmd.Start()
 	if err != nil {
 		return err
 	}
+	time.Sleep(time.Second * 5)
 	return nil
 }
 
