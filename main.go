@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -29,6 +30,8 @@ type Service struct {
 	closer jsonrpc.ClientCloser
 
 	threshold types.FIL
+	start     time.Time
+	finish    time.Time
 
 	owner string
 }
@@ -46,7 +49,10 @@ func NewService(ctx context.Context, threshold string) *Service {
 		log.Fatalf("parsing threshold failed: %s", err)
 	}
 
-	return &Service{api: api, closer: closer, threshold: thresholdFIL, owner: owner}
+	start, _ := time.Parse(time.Kitchen, "9:00AM")
+	finish, _ := time.Parse(time.Kitchen, "5:00PM")
+
+	return &Service{api: api, closer: closer, threshold: thresholdFIL, start: start, finish: finish, owner: owner}
 }
 
 func main() {
@@ -119,10 +125,87 @@ var buyCmd = &cli.Command{
 				log.Fatalf("init miner failed: %s", err)
 				return err
 			}
-			//TODO: read miner token out of newly created ~/.lotusminer/token file into env var
+
+			// start lotus-miner process with TRUST_PARAMS=1
+			err = svc.StartMiner(ctx)
+			if err != nil {
+				return err
+			}
+
+			content, err := ioutil.ReadFile("~/.lotusminer/token")
+			if err != nil {
+				log.Printf("reading token failed: %s", err)
+				return err
+			}
+			os.Setenv("MINER_TOKEN", string(content))
+
+			// get the timestamp of the zeroth deadline
+			cd, err := svc.GetMinerProvingInfo(ctx)
+			if err != nil {
+				return err
+			}
+			zerothDeadline := GetZerothDeadlineFromCurrentDeadline(cd)
+
+			// if the zeroth deadline is between the time range set, backup miner
+			if zerothDeadline.Hour() <= svc.start.Hour() && zerothDeadline.Hour() >= svc.finish.Hour() {
+				log.Println("backing up miner; in tz")
+				svc.BackupMiner(ctx, worker, true)
+			} else {
+				log.Println("backing up miner; not in tz")
+				svc.BackupMiner(ctx, worker, false)
+			}
 		}
 		return nil
 	},
+}
+
+// BackupMiner creates a backup of the miner
+func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ bool) error {
+	err := svc.StopMiner(ctx)
+	if err != nil {
+		return err
+	}
+
+	// write worker address to file
+	if inTZ {
+		err = ioutil.WriteFile("~/keepminer.list", []byte(fmt.Sprintf("%s\n", worker)), 0644)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = ioutil.WriteFile("~/sellminer.list", []byte(fmt.Sprintf("%s\n", worker)), 0644)
+		if err != nil {
+			return err
+		}
+	}
+
+	{
+		args := []string{"backup", fmt.Sprintf("~/.lotusbackup/%s/bak", worker)}
+		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+	}
+
+	{
+		args := []string{"wallet", "export", worker}
+		out, err := exec.Command("lotus", args...).Output()
+		if err != nil {
+			return err
+		}
+		err = ioutil.WriteFile(fmt.Sprintf("~/.lotusbackup/%s/key", worker), out, 0644)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = os.RemoveAll("~/.lotusminer")
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // InitMiner uses the lotus-miner cli to initialize a miner
@@ -132,6 +215,32 @@ func (s *Service) InitMiner(ctx context.Context, worker string) error {
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// StartMiner uses the lotus-miner cli to start a miner
+func (s *Service) StartMiner(ctx context.Context) error {
+	os.Setenv("TRUST_PARAMS", "1")
+	args := []string{"run"}
+
+	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Start()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// StopMiner uses the lotus-miner cli to stop a miner
+func (s *Service) StopMiner(ctx context.Context) error {
+	args := []string{"stop"}
+	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	err := cmd.Run()
 	if err != nil {
 		return err
@@ -248,6 +357,5 @@ func (s *Service) GetMinerProvingInfo(ctx context.Context) (*dline.Info, error) 
 // gets challenged
 func GetZerothDeadlineFromCurrentDeadline(dl *dline.Info) time.Time {
 	di0do := dl.CurrentEpoch - (dl.CurrentEpoch - dl.Open + abi.ChainEpoch(int64(dl.Index)*int64(miner.WPoStChallengeWindow)))
-
 	return EpochTimestamp(di0do)
 }
