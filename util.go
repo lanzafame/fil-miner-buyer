@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/filecoin-project/go-state-types/abi"
@@ -34,4 +35,20 @@ func EpochTimestamp(e abi.ChainEpoch) time.Time {
 
 func DurationSinceGenesis(e abi.ChainEpoch) time.Duration {
 	return durafmt.Parse(time.Second * time.Duration(int64(build.BlockDelaySecs)*int64(e))).LimitFirstN(2).Duration()
+}
+
+func AppendFile(file string, data []byte) error {
+	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
+		return err
+	}
+	return nil
+}
+
+func home(home, path string) string {
+	return fmt.Sprintf("%s/%s", home, path)
 }

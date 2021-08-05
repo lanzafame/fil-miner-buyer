@@ -21,6 +21,7 @@ import (
 	"github.com/filecoin-project/lotus/chain/store"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/specs-actors/actors/builtin"
+	"github.com/mitchellh/go-homedir"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/xerrors"
 )
@@ -60,6 +61,7 @@ func main() {
 		buyCmd,
 		infoCmd,
 		outputCmd,
+		backupCmd,
 	}
 
 	app := &cli.App{
@@ -103,6 +105,29 @@ var infoCmd = &cli.Command{
 	},
 }
 
+var backupCmd = &cli.Command{
+	Name: "backup",
+	Action: func(c *cli.Context) error {
+		ctx := context.Background()
+
+		threshold := os.Getenv("THRESHOLD")
+		svc := NewService(ctx, threshold)
+		defer svc.closer()
+
+		if c.Args().Len() < 1 {
+			return fmt.Errorf("please provide a worker address to backup")
+		}
+
+		worker := c.Args().First()
+		err := svc.BackupMiner(ctx, worker, 2)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	},
+}
+
 var buyCmd = &cli.Command{
 	Name: "buy",
 	Action: func(c *cli.Context) error {
@@ -132,7 +157,12 @@ var buyCmd = &cli.Command{
 				return err
 			}
 
-			content, err := ioutil.ReadFile("~/.lotusminer/token")
+			tokenPath, err := homedir.Expand("~/.lotusminer/token")
+			if err != nil {
+				return err
+			}
+
+			content, err := ioutil.ReadFile(tokenPath)
 			if err != nil {
 				log.Printf("reading token failed: %s", err)
 				return err
@@ -149,10 +179,10 @@ var buyCmd = &cli.Command{
 			// if the zeroth deadline is between the time range set, backup miner
 			if zerothDeadline.Hour() <= svc.start.Hour() && zerothDeadline.Hour() >= svc.finish.Hour() {
 				log.Println("backing up miner; in tz")
-				svc.BackupMiner(ctx, worker, true)
+				svc.BackupMiner(ctx, worker, 1)
 			} else {
 				log.Println("backing up miner; not in tz")
-				svc.BackupMiner(ctx, worker, false)
+				svc.BackupMiner(ctx, worker, 0)
 			}
 		}
 		return nil
@@ -160,32 +190,42 @@ var buyCmd = &cli.Command{
 }
 
 // BackupMiner creates a backup of the miner
-func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ bool) error {
+func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ int) error {
 	err := svc.StopMiner(ctx)
 	if err != nil {
 		return err
 	}
 
+	h, err := homedir.Dir()
+	if err != nil {
+		return err
+	}
+
 	// write worker address to file
-	if inTZ {
-		err = ioutil.WriteFile("~/keepminer.list", []byte(fmt.Sprintf("%s\n", worker)), 0644)
+	if inTZ == 1 {
+		err = AppendFile(home(h, "keepminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
+		if err != nil {
+			return err
+		}
+	} else if inTZ == 0 {
+		err = AppendFile(home(h, "sellminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
 		if err != nil {
 			return err
 		}
 	} else {
-		err = ioutil.WriteFile("~/sellminer.list", []byte(fmt.Sprintf("%s\n", worker)), 0644)
+		err = AppendFile(home(h, "backupminer.list"), []byte(fmt.Sprintf("%s\n", worker)))
 		if err != nil {
 			return err
 		}
 	}
 
-	err = os.Mkdir(fmt.Sprintf("~/.lotusbackup/%s", worker), 0755)
+	err = os.MkdirAll(fmt.Sprintf(home(h, ".lotusbackup/%s"), worker), 0755)
 	if err != nil {
 		return err
 	}
 
 	{
-		args := []string{"backup", fmt.Sprintf("~/.lotusbackup/%s/bak", worker)}
+		args := []string{"backup", fmt.Sprintf(home(h, ".lotusbackup/%s/bak"), worker)}
 		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 		err = cmd.Run()
 		if err != nil {
@@ -199,13 +239,13 @@ func (svc *Service) BackupMiner(ctx context.Context, worker string, inTZ bool) e
 		if err != nil {
 			return err
 		}
-		err = ioutil.WriteFile(fmt.Sprintf("~/.lotusbackup/%s/key", worker), out, 0644)
+		err = ioutil.WriteFile(fmt.Sprintf(home(h, ".lotusbackup/%s/key"), worker), out, 0644)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = os.RemoveAll("~/.lotusminer")
+	err = os.RemoveAll(home(h, ".lotusminer"))
 	if err != nil {
 		return err
 	}
