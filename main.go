@@ -383,10 +383,8 @@ func (s *Service) StartMiner(ctx context.Context) error {
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	cmd.Env = append(os.Environ(), "TRUST_PARAMS=1")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	// cmd.Stdout = ioutil.Discard
-	// cmd.Stderr = ioutil.Discard
+	cmd.Stdout = ioutil.Discard
+	cmd.Stderr = ioutil.Discard
 	err := cmd.Start()
 	if err != nil {
 		return err
