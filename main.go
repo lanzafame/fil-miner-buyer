@@ -363,16 +363,32 @@ func (s *Service) RestoreMiner(ctx context.Context) error {
 		return err
 	}
 
-	args := []string{"init", "restore", fmt.Sprintf(home(s.h, ".lotusbackup/%s/bak"), s.worker)}
+	{
+		args := []string{"init", "restore", fmt.Sprintf(home(s.h, ".lotusbackup/%s/bak"), s.worker)}
 
-	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
-	cmd.Env = append(os.Environ(), "TRUST_PARAMS=1", s.MinerPathEnv())
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
-		return err
+		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
+		cmd.Env = append(os.Environ(), "TRUST_PARAMS=1", s.MinerPathEnv())
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			return err
+		}
 	}
+
+	{
+		args := []string{"storage", "attach", "--init", "--seal", "--storage", s.MinerPath()}
+
+		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
+		cmd.Env = append(os.Environ(), "TRUST_PARAMS=1", s.MinerPathEnv())
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
