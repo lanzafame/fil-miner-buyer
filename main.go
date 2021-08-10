@@ -377,7 +377,7 @@ func (s *Service) RestoreMiner(ctx context.Context) error {
 	}
 
 	{
-		args := []string{"storage", "attach", "--init", "--seal", "--storage", s.MinerPath()}
+		args := []string{"storage", "attach", "--init", "--seal", "--store", s.MinerPath()}
 
 		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 		cmd.Env = append(os.Environ(), "TRUST_PARAMS=1", s.MinerPathEnv())
