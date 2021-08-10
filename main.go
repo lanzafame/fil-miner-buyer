@@ -82,6 +82,12 @@ func main() {
 	app := &cli.App{
 		Name:     "fil-miner-buyer",
 		Commands: local,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "debug",
+				Usage: "enable debug mode",
+			},
+		},
 	}
 	app.Setup()
 
@@ -120,7 +126,7 @@ var infoCmd = &cli.Command{
 			return err
 		}
 
-		err = svc.StartMiner(ctx)
+		err = svc.StartMiner(ctx, c.Bool("debug"))
 		if err != nil {
 			log.Printf("starting miner failed: %s", err)
 			return err
@@ -159,7 +165,7 @@ var backupCmd = &cli.Command{
 		}
 		svc.worker = c.Args().First()
 
-		err := svc.StartMiner(ctx)
+		err := svc.StartMiner(ctx, c.Bool("debug"))
 		if err != nil {
 			log.Printf("starting miner failed: %s", err)
 			return err
@@ -207,7 +213,7 @@ var buyCmd = &cli.Command{
 			}
 
 			log.Println("starting miner")
-			err = svc.StartMiner(ctx)
+			err = svc.StartMiner(ctx, c.Bool("debug"))
 			if err != nil {
 				log.Printf("starting miner failed: %s", err)
 				return err
@@ -371,13 +377,18 @@ func (s *Service) RestoreMiner(ctx context.Context) error {
 }
 
 // StartMiner uses the lotus-miner cli to start a miner
-func (s *Service) StartMiner(ctx context.Context) error {
+func (s *Service) StartMiner(ctx context.Context, debug bool) error {
 	args := []string{"run"}
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	cmd.Env = append(os.Environ(), s.MinerPathEnv(), "TRUST_PARAMS=1")
-	cmd.Stdout = ioutil.Discard
-	cmd.Stderr = ioutil.Discard
+	if debug {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	} else {
+		cmd.Stdout = ioutil.Discard
+		cmd.Stderr = ioutil.Discard
+	}
 	err := cmd.Start()
 	if err != nil {
 		return err
