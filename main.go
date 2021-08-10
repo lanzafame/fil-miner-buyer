@@ -130,7 +130,6 @@ var infoCmd = &cli.Command{
 		err = svc.SetMinerToken(ctx)
 		if err != nil {
 			log.Printf("setting miner token failed: %s", err)
-			return err
 		}
 
 		cd, err := svc.GetMinerProvingInfo(ctx)
