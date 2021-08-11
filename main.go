@@ -130,7 +130,6 @@ var infoCmd = &cli.Command{
 		err := svc.RestoreMiner(ctx)
 		if err != nil {
 			log.Printf("restoring miner failed: %s", err)
-			return err
 		}
 
 		err = svc.StartMiner(ctx)
