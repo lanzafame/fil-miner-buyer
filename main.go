@@ -348,8 +348,7 @@ func (s *Service) InitMiner(ctx context.Context) error {
 func (s *Service) RestoreMiner(ctx context.Context) error {
 	// confirm that there is no lotusminer directory
 	if _, err := os.Stat(s.MinerPath()); err == nil {
-		log.Printf("error: lotusminer directory already exists")
-		return err
+		return fmt.Errorf("lotusminer directory already exists: %w", err)
 	}
 
 	{
