@@ -104,7 +104,8 @@ func main() {
 }
 
 var fixCmd = &cli.Command{
-	Name: "fix",
+	Name:  "fix",
+	Usage: "fix <minerID> <minerAddress>",
 	Action: func(c *cli.Context) error {
 		addr, err := address.NewFromString(c.Args().First())
 		if err != nil {
@@ -114,7 +115,7 @@ var fixCmd = &cli.Command{
 		if err != nil {
 			log.Printf("getting home directory failed: %s", err)
 		}
-		minerpath := home(h, fmt.Sprintf(".lotusminer-%s", c.Args().Get(2)))
+		minerpath := home(h, fmt.Sprintf(".lotusminer-%s", c.Args().Get(1)))
 
 		return fixMinerMetadata(context.Background(), minerpath, addr)
 	},
