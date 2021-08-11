@@ -86,6 +86,7 @@ func main() {
 			&cli.BoolFlag{
 				Name:  "debug",
 				Usage: "enable debug mode",
+				Value: false,
 			},
 		},
 	}
