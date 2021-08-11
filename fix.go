@@ -42,12 +42,16 @@ func (s Miner) getMinerMetadata(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	addr, err := mds.Get(datastore.NewKey("miner-address"))
+	addrb, err := mds.Get(datastore.NewKey("miner-address"))
 	if err != nil {
 		return "", err
 	}
 
-	return string(addr), nil
+	addr, err := address.NewFromBytes(addrb)
+	if err != nil {
+		return "", err
+	}
+	return addr.String(), nil
 }
 
 func (s Miner) fixMinerMetadata(ctx context.Context) error {
