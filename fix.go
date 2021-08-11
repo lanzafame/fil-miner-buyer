@@ -65,7 +65,7 @@ func (s Miner) fixMinerMetadata(ctx context.Context) error {
 		return err
 	}
 
-	addr, err := address.NewFromString(s.worker)
+	addr, err := address.NewFromString(s.id)
 	if err != nil {
 		return fmt.Errorf("invalid address: %w", err)
 	}
