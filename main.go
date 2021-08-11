@@ -147,6 +147,12 @@ var infoCmd = &cli.Command{
 		fmt.Println(GetZerothDeadlineFromCurrentDeadline(cd).String())
 		fmt.Println(GetZerothDeadlineFromCurrentDeadline(cd).Hour())
 
+		err = svc.RemoveMinerDir(ctx)
+		if err != nil {
+			log.Printf("removing miner dir failed: %s", err)
+			return err
+		}
+
 		return nil
 	},
 }
