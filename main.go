@@ -33,17 +33,22 @@ type Service struct {
 	start     time.Time
 	finish    time.Time
 
+	Miner
+}
+
+type Miner struct {
 	owner  string
 	worker string
+	id     string
 
 	h string
 }
 
-func (s *Service) MinerPath() string {
+func (s Miner) MinerPath() string {
 	return home(s.h, fmt.Sprintf(".lotusminer-%s", s.worker))
 }
 
-func (s *Service) MinerPathEnv() string {
+func (s Miner) MinerPathEnv() string {
 	minerpath := home(s.h, fmt.Sprintf(".lotusminer-%s", s.worker))
 	return fmt.Sprintf("LOTUS_MINER_PATH=%s", minerpath)
 }
@@ -69,7 +74,9 @@ func NewService(ctx context.Context, threshold string) *Service {
 		log.Printf("getting home directory failed: %s", err)
 	}
 
-	return &Service{api: api, closer: closer, threshold: thresholdFIL, start: start, finish: finish, owner: owner, h: h}
+	miner := Miner{owner, "", "", h}
+
+	return &Service{api: api, closer: closer, threshold: thresholdFIL, start: start, finish: finish, Miner: miner}
 }
 
 func main() {
@@ -78,6 +85,7 @@ func main() {
 		infoCmd,
 		fixCmd,
 		backupCmd,
+		getCmd,
 	}
 
 	app := &cli.App{
@@ -107,17 +115,31 @@ var fixCmd = &cli.Command{
 	Name:  "fix",
 	Usage: "fix <minerID> <minerAddress>",
 	Action: func(c *cli.Context) error {
-		addr, err := address.NewFromString(c.Args().First())
-		if err != nil {
-			return fmt.Errorf("invalid address: %w", err)
-		}
 		h, err := homedir.Dir()
 		if err != nil {
 			log.Printf("getting home directory failed: %s", err)
 		}
-		minerpath := home(h, fmt.Sprintf(".lotusminer-%s", c.Args().Get(1)))
+		miner := Miner{"", c.Args().Get(1), c.Args().Get(0), h}
 
-		return fixMinerMetadata(context.Background(), minerpath, addr)
+		return miner.fixMinerMetadata(context.Background())
+	},
+}
+
+var getCmd = &cli.Command{
+	Name:  "get",
+	Usage: "get <minerID>",
+	Action: func(c *cli.Context) error {
+		h, err := homedir.Dir()
+		if err != nil {
+			log.Printf("getting home directory failed: %s", err)
+		}
+		miner := Miner{"", c.Args().Get(0), "", h}
+		addr, err := miner.getMinerMetadata(context.Background())
+		if err != nil {
+			return err
+		}
+		fmt.Println(addr)
+		return nil
 	},
 }
 

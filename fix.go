@@ -9,31 +9,62 @@ import (
 	"github.com/ipfs/go-datastore"
 )
 
-func fixMinerMetadata(ctx context.Context, minerRepoPath string, addr address.Address) error {
-	r, err := repo.NewFS(minerRepoPath)
+func (s Miner) GetDatastore(ctx context.Context) (repo.LockedRepo, error) {
+	r, err := repo.NewFS(s.MinerPath())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ok, err := r.Exists()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !ok {
-		return fmt.Errorf("repo at '%s' is not initialized, run 'lotus-miner init' to set it up", minerRepoPath)
+		return nil, fmt.Errorf("repo at '%s' is not initialized, run 'lotus-miner init' to set it up", s.MinerPath())
 	}
 
 	lr, err := r.Lock(repo.StorageMiner)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer lr.Close() //nolint:errcheck
 
-	mds, err := lr.Datastore(context.TODO(), "/metadata")
+	return lr, nil
+}
+
+func (s Miner) getMinerMetadata(ctx context.Context) (string, error) {
+	lr, err := s.GetDatastore(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	mds, err := lr.Datastore(ctx, "/metadata")
+	if err != nil {
+		return "", err
+	}
+
+	addr, err := mds.Get(datastore.NewKey("miner-address"))
+	if err != nil {
+		return "", err
+	}
+
+	return string(addr), nil
+}
+
+func (s Miner) fixMinerMetadata(ctx context.Context) error {
+	lr, err := s.GetDatastore(ctx)
 	if err != nil {
 		return err
 	}
 
+	mds, err := lr.Datastore(ctx, "/metadata")
+	if err != nil {
+		return err
+	}
+
+	addr, err := address.NewFromString(s.worker)
+	if err != nil {
+		return fmt.Errorf("invalid address: %w", err)
+	}
 	if err := mds.Put(datastore.NewKey("miner-address"), addr.Bytes()); err != nil {
 		return err
 	}
