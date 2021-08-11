@@ -176,6 +176,7 @@ var backupCmd = &cli.Command{
 			log.Printf("starting miner failed: %s", err)
 			return err
 		}
+		defer svc.StopMiner(ctx)
 
 		err = svc.BackupMiner(ctx, 22)
 		if err != nil {
@@ -188,8 +189,6 @@ var backupCmd = &cli.Command{
 			log.Printf("removing miner dir failed: %s", err)
 			return err
 		}
-
-		svc.StopMiner(ctx)
 
 		return nil
 	},
@@ -224,6 +223,7 @@ var buyCmd = &cli.Command{
 				log.Printf("starting miner failed: %s", err)
 				return err
 			}
+			defer svc.StopMiner(ctx)
 
 			err = svc.SetMinerToken(ctx)
 			if err != nil {
@@ -255,13 +255,6 @@ var buyCmd = &cli.Command{
 					log.Printf("backing up sell miner failed: %s", err)
 					return err
 				}
-			}
-
-			log.Printf("stopping miner")
-			err = svc.StopMiner(ctx)
-			if err != nil {
-				log.Printf("stopping miner failed: %s", err)
-				return err
 			}
 
 			log.Printf("moving miner dir")
