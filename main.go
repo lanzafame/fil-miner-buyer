@@ -21,7 +21,6 @@ import (
 	"github.com/filecoin-project/specs-actors/actors/builtin"
 	"github.com/mitchellh/go-homedir"
 	"github.com/urfave/cli/v2"
-	"golang.org/x/xerrors"
 )
 
 var debug bool
@@ -134,8 +133,7 @@ var infoCmd = &cli.Command{
 
 		err = svc.StartMiner(ctx)
 		if err != nil {
-			log.Printf("starting miner failed: %s", err)
-			return err
+			return fmt.Errorf("starting miner failed: %w", err)
 		}
 		defer svc.StopMiner(ctx)
 
@@ -146,8 +144,7 @@ var infoCmd = &cli.Command{
 
 		cd, err := svc.GetMinerProvingInfo(ctx)
 		if err != nil {
-			log.Printf("getting miner proving info failed: %s", err)
-			return err
+			return fmt.Errorf("getting miner proving info failed: %w", err)
 		}
 
 		fmt.Println(GetZerothDeadlineFromCurrentDeadline(cd).String())
@@ -155,8 +152,7 @@ var infoCmd = &cli.Command{
 
 		err = svc.RemoveMinerDir(ctx)
 		if err != nil {
-			log.Printf("removing miner dir failed: %s", err)
-			return err
+			return fmt.Errorf("removing miner dir failed: %w", err)
 		}
 
 		return nil
@@ -179,21 +175,18 @@ var backupCmd = &cli.Command{
 
 		err := svc.StartMiner(ctx)
 		if err != nil {
-			log.Printf("starting miner failed: %s", err)
-			return err
+			return fmt.Errorf("starting miner failed: %w", err)
 		}
 		defer svc.StopMiner(ctx)
 
 		err = svc.BackupMiner(ctx, 22)
 		if err != nil {
-			log.Printf("backing up miner failed: %s", err)
-			return err
+			return fmt.Errorf("backing up miner failed: %w", err)
 		}
 
 		err = svc.RemoveMinerDir(ctx)
 		if err != nil {
-			log.Printf("removing miner dir failed: %s", err)
-			return err
+			return fmt.Errorf("removing miner dir failed: %w", err)
 		}
 
 		return nil
@@ -212,36 +205,31 @@ var buyCmd = &cli.Command{
 		if svc.IsGasPriceBelowThreshold(ctx) {
 			worker, err := svc.CreateBLSWallet(ctx)
 			if err != nil {
-				log.Printf("creating BLS wallet failed: %s", err)
-				return err
+				return fmt.Errorf("creating BLS wallet failed: %w", err)
 			}
 			log.Println(worker)
 			log.Println("initing miner")
 			err = svc.InitMiner(ctx)
 			if err != nil {
-				log.Printf("init miner failed: %s", err)
-				return err
+				return fmt.Errorf("init miner failed: %w", err)
 			}
 
 			log.Println("starting miner")
 			err = svc.StartMiner(ctx)
 			if err != nil {
-				log.Printf("starting miner failed: %s", err)
-				return err
+				return fmt.Errorf("starting miner failed: %w", err)
 			}
 			defer svc.StopMiner(ctx)
 
 			err = svc.SetMinerToken(ctx)
 			if err != nil {
-				log.Printf("setting miner token failed: %s", err)
-				return err
+				return fmt.Errorf("setting miner token failed: %w", err)
 			}
 
 			// get the timestamp of the zeroth deadline
 			cd, err := svc.GetMinerProvingInfo(ctx)
 			if err != nil {
-				log.Printf("getting miner proving info failed: %s", err)
-				return err
+				return fmt.Errorf("getting miner proving info failed: %w", err)
 			}
 			zerothDeadline := GetZerothDeadlineFromCurrentDeadline(cd)
 
@@ -251,23 +239,20 @@ var buyCmd = &cli.Command{
 				log.Println("backing up miner; in tz")
 				err = svc.BackupMiner(ctx, 1)
 				if err != nil {
-					log.Printf("backing up keep miner failed: %s", err)
-					return err
+					return fmt.Errorf("backing up miner failed: %w", err)
 				}
 			} else {
 				log.Println("backing up miner; not in tz")
 				svc.BackupMiner(ctx, 0)
 				if err != nil {
-					log.Printf("backing up sell miner failed: %s", err)
-					return err
+					return fmt.Errorf("backing up sell miner failed: %w", err)
 				}
 			}
 
 			log.Printf("moving miner dir")
 			err = svc.RemoveMinerDir(ctx)
 			if err != nil {
-				log.Printf("removing miner dir failed: %s", err)
-				return err
+				return fmt.Errorf("removing miner dir failed: %w", err)
 			}
 		}
 		return nil
@@ -281,27 +266,23 @@ func (s *Service) BackupMiner(ctx context.Context, inTZ int) error {
 	if inTZ == 1 {
 		err = AppendFile(home(s.h, "keepminer.list"), []byte(fmt.Sprintf("%s\n", s.worker)))
 		if err != nil {
-			log.Printf("error appending worker to keepminer.list: %s", err)
-			return err
+			return fmt.Errorf("error appending worker to keepminer.list: %w", err)
 		}
 	} else if inTZ == 0 {
 		err = AppendFile(home(s.h, "sellminer.list"), []byte(fmt.Sprintf("%s\n", s.worker)))
 		if err != nil {
-			log.Printf("error appending worker to sellminer.list: %s", err)
-			return err
+			return fmt.Errorf("error appending worker to sellminer.list: %w", err)
 		}
 	} else {
 		err = AppendFile(home(s.h, "backupminer.list"), []byte(fmt.Sprintf("%s\n", s.worker)))
 		if err != nil {
-			log.Printf("error appending worker to backupminer.list: %s", err)
-			return err
+			return fmt.Errorf("error appending worker to backupminer.list: %w", err)
 		}
 	}
 
 	err = os.MkdirAll(fmt.Sprintf(home(s.h, ".lotusbackup/%s"), s.worker), 0755)
 	if err != nil {
-		log.Printf("error creating lotusbackup directory: %s", err)
-		return err
+		return fmt.Errorf("error creating lotusbackup directory: %w", err)
 	}
 
 	{
@@ -317,8 +298,7 @@ func (s *Service) BackupMiner(ctx context.Context, inTZ int) error {
 		}
 		err = cmd.Run()
 		if err != nil {
-			log.Printf("error running lotus-miner backup: %s", err)
-			return err
+			return fmt.Errorf("error running lotus-miner backup: %w", err)
 		}
 	}
 
@@ -326,13 +306,11 @@ func (s *Service) BackupMiner(ctx context.Context, inTZ int) error {
 		args := []string{"wallet", "export", s.worker}
 		out, err := exec.Command("lotus", args...).Output()
 		if err != nil {
-			log.Printf("error running lotus wallet export: %s", err)
-			return err
+			return fmt.Errorf("error running lotus wallet export: %w", err)
 		}
 		err = ioutil.WriteFile(fmt.Sprintf(home(s.h, ".lotusbackup/%s/key"), s.worker), out, 0644)
 		if err != nil {
-			log.Printf("error writing wallet export: %s", err)
-			return err
+			return fmt.Errorf("error writing wallet export: %w", err)
 		}
 	}
 
@@ -345,8 +323,7 @@ func (s *Service) RemoveMinerDir(ctx context.Context) error {
 
 	err := os.Rename(s.MinerPath(), backuppath)
 	if err != nil {
-		log.Printf("error removing lotusminer directory: %s", err)
-		return err
+		return fmt.Errorf("error removing lotusminer directory: %w", err)
 	}
 
 	return nil
@@ -401,8 +378,7 @@ func (s *Service) RestoreMiner(ctx context.Context) error {
 	// create empty storage.json file
 	err := ioutil.WriteFile(s.MinerPath()+"/storage.json", []byte("{}"), 0644)
 	if err != nil {
-		log.Printf("error writing storage.json: %s", err)
-		return err
+		return fmt.Errorf("error writing storage.json: %s", err)
 	}
 
 	return nil
@@ -514,7 +490,7 @@ func GetMinerAddress(ctx context.Context) (address.Address, error) {
 func (s *Service) GetMinerProvingInfo(ctx context.Context) (*dline.Info, error) {
 	head, err := s.api.ChainHead(ctx)
 	if err != nil {
-		return nil, xerrors.Errorf("getting chain head: %w", err)
+		return nil, fmt.Errorf("getting chain head: %w", err)
 	}
 
 	maddr, err := GetMinerAddress(ctx)
@@ -536,7 +512,7 @@ func (s *Service) GetMinerProvingInfo(ctx context.Context) (*dline.Info, error) 
 
 	ts, err := s.api.ChainGetTipSet(ctx, head.Key())
 	if err != nil {
-		return nil, xerrors.Errorf("loading tipset %s: %w", head.Key(), err)
+		return nil, fmt.Errorf("loading tipset %s: %w", head.Key(), err)
 	}
 
 	// cd, err := mas.DeadlineInfo(ts.Height())
@@ -546,7 +522,7 @@ func (s *Service) GetMinerProvingInfo(ctx context.Context) (*dline.Info, error) 
 
 	cd, err := s.api.StateMinerProvingDeadline(ctx, maddr, ts.Key())
 	if err != nil {
-		return nil, xerrors.Errorf("failed to get deadline info: %w", err)
+		return nil, fmt.Errorf("failed to get deadline info: %w", err)
 	}
 
 	return cd, nil
