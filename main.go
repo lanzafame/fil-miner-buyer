@@ -24,6 +24,8 @@ import (
 	"golang.org/x/xerrors"
 )
 
+var debug bool
+
 type Service struct {
 	api    lotusapi.FullNode
 	closer jsonrpc.ClientCloser
@@ -89,6 +91,10 @@ func main() {
 				Value: false,
 			},
 		},
+		Before: func(ctx *cli.Context) error {
+			debug = ctx.Bool("debug")
+			return nil
+		},
 	}
 	app.Setup()
 
@@ -127,7 +133,7 @@ var infoCmd = &cli.Command{
 			return err
 		}
 
-		err = svc.StartMiner(ctx, c.Bool("debug"))
+		err = svc.StartMiner(ctx)
 		if err != nil {
 			log.Printf("starting miner failed: %s", err)
 			return err
@@ -172,7 +178,7 @@ var backupCmd = &cli.Command{
 		}
 		svc.worker = c.Args().First()
 
-		err := svc.StartMiner(ctx, c.Bool("debug"))
+		err := svc.StartMiner(ctx)
 		if err != nil {
 			log.Printf("starting miner failed: %s", err)
 			return err
@@ -219,7 +225,7 @@ var buyCmd = &cli.Command{
 			}
 
 			log.Println("starting miner")
-			err = svc.StartMiner(ctx, c.Bool("debug"))
+			err = svc.StartMiner(ctx)
 			if err != nil {
 				log.Printf("starting miner failed: %s", err)
 				return err
@@ -303,6 +309,13 @@ func (s *Service) BackupMiner(ctx context.Context, inTZ int) error {
 		args := []string{"backup", fmt.Sprintf(home(s.h, ".lotusbackup/%s/bak"), s.worker)}
 		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 		cmd.Env = append(os.Environ(), s.MinerPathEnv())
+		if debug {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		} else {
+			cmd.Stdout = ioutil.Discard
+			cmd.Stderr = ioutil.Discard
+		}
 		err = cmd.Run()
 		if err != nil {
 			log.Printf("error running lotus-miner backup: %s", err)
@@ -346,8 +359,13 @@ func (s *Service) InitMiner(ctx context.Context) error {
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	cmd.Env = append(os.Environ(), s.MinerPathEnv(), "TRUST_PARAMS=1")
-	cmd.Stdout = ioutil.Discard
-	cmd.Stderr = ioutil.Discard
+	if debug {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	} else {
+		cmd.Stdout = ioutil.Discard
+		cmd.Stderr = ioutil.Discard
+	}
 	err := cmd.Run()
 	if err != nil {
 		return err
@@ -368,8 +386,13 @@ func (s *Service) RestoreMiner(ctx context.Context) error {
 
 		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 		cmd.Env = append(os.Environ(), "TRUST_PARAMS=1", s.MinerPathEnv())
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		if debug {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		} else {
+			cmd.Stdout = ioutil.Discard
+			cmd.Stderr = ioutil.Discard
+		}
 		err := cmd.Run()
 		if err != nil {
 			return err
@@ -387,7 +410,7 @@ func (s *Service) RestoreMiner(ctx context.Context) error {
 }
 
 // StartMiner uses the lotus-miner cli to start a miner
-func (s *Service) StartMiner(ctx context.Context, debug bool) error {
+func (s *Service) StartMiner(ctx context.Context) error {
 	args := []string{"run"}
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
