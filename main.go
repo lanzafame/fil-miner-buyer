@@ -76,7 +76,7 @@ func main() {
 	local := []*cli.Command{
 		buyCmd,
 		infoCmd,
-		outputCmd,
+		fixCmd,
 		backupCmd,
 	}
 
@@ -103,13 +103,20 @@ func main() {
 
 }
 
-var outputCmd = &cli.Command{
-	Name: "output",
+var fixCmd = &cli.Command{
+	Name: "fix",
 	Action: func(c *cli.Context) error {
-		t := time.Unix(1598306400, 0)
-		fmt.Println(t.String())
-		fmt.Println(EpochTimestamp(abi.ChainEpoch(994203)).String())
-		return nil
+		addr, err := address.NewFromString(c.Args().First())
+		if err != nil {
+			return fmt.Errorf("invalid address: %w", err)
+		}
+		h, err := homedir.Dir()
+		if err != nil {
+			log.Printf("getting home directory failed: %s", err)
+		}
+		minerpath := home(h, fmt.Sprintf(".lotusminer-%s", c.Args().Get(2)))
+
+		return fixMinerMetadata(context.Background(), minerpath, addr)
 	},
 }
 
