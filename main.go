@@ -376,17 +376,11 @@ func (s *Service) RestoreMiner(ctx context.Context) error {
 		}
 	}
 
-	{
-		args := []string{"storage", "attach", "--init", "--seal", "--store", s.MinerPath()}
-
-		cmd := exec.CommandContext(ctx, "lotus-miner", args...)
-		cmd.Env = append(os.Environ(), "TRUST_PARAMS=1", s.MinerPathEnv())
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err := cmd.Run()
-		if err != nil {
-			return err
-		}
+	// create empty storage.json file
+	err := ioutil.WriteFile(s.MinerPath()+"/storage.json", []byte("{}"), 0644)
+	if err != nil {
+		log.Printf("error writing storage.json: %s", err)
+		return err
 	}
 
 	return nil
