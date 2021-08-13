@@ -13,9 +13,12 @@ import (
 	"github.com/filecoin-project/go-address"
 	jsonrpc "github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/go-state-types/abi"
+	"github.com/filecoin-project/go-state-types/big"
 	"github.com/filecoin-project/go-state-types/dline"
 	lotusapi "github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
+	"github.com/filecoin-project/lotus/build"
+	"github.com/filecoin-project/lotus/chain/actors"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/specs-actors/actors/builtin"
@@ -42,6 +45,24 @@ type Miner struct {
 	id     string
 
 	h string
+}
+
+func NewMiner(owner, worker, id string) Miner {
+	if owner == "" {
+		owner = os.Getenv("OWNER_ADDR")
+	}
+
+	h, err := homedir.Dir()
+	if err != nil {
+		log.Printf("getting home directory failed: %s", err)
+	}
+
+	return Miner{
+		owner:  owner,
+		worker: worker,
+		id:     id,
+		h:      h,
+	}
 }
 
 func (s Miner) MinerPath() string {
@@ -86,6 +107,7 @@ func main() {
 		fixCmd,
 		backupCmd,
 		getCmd,
+		transferCmd,
 	}
 
 	app := &cli.App{
@@ -119,7 +141,7 @@ var fixCmd = &cli.Command{
 		if err != nil {
 			log.Printf("getting home directory failed: %s", err)
 		}
-		miner := Miner{"", c.Args().Get(1), c.Args().Get(0), h}
+		miner := NewMiner("", c.Args().Get(1), c.Args().Get(0))
 
 		return miner.fixMinerMetadata(context.Background())
 	},
@@ -133,7 +155,7 @@ var getCmd = &cli.Command{
 		if err != nil {
 			log.Printf("getting home directory failed: %s", err)
 		}
-		miner := Miner{"", c.Args().Get(0), "", h}
+		miner := NewMiner("", c.Args().Get(0), "")
 		addr, err := miner.getMinerMetadata(context.Background())
 		if err != nil {
 			return err
@@ -567,4 +589,126 @@ func (s *Service) SetMinerToken(ctx context.Context) error {
 	}
 	os.Setenv("LOTUSMINER_TOKEN", string(content))
 	return nil
+}
+
+// TransferOwnership transfers the ownership of the miner to the given address
+// using the lotus-miner cli.
+func (s Miner) TransferOwnership(ctx context.Context, new string) error {
+	err := s.transferOwnership(ctx, new)
+	if err != nil {
+		return fmt.Errorf("failed to complete first ownership transfer: %w", err)
+	}
+
+	err = s.transferOwnership(ctx, new)
+	if err != nil {
+		return fmt.Errorf("failed to finalize ownership transfer: %w", err)
+	}
+	return nil
+}
+
+func (s Miner) transferOwnership(ctx context.Context, new string) error {
+	api, acloser, err := LotusClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer acloser()
+
+	na, err := address.NewFromString(new)
+	if err != nil {
+		return err
+	}
+
+	newAddrId, err := api.StateLookupID(ctx, na, types.EmptyTSK)
+	if err != nil {
+		return err
+	}
+
+	fa, err := address.NewFromString(s.owner)
+	if err != nil {
+		return err
+	}
+
+	fromAddrId, err := api.StateLookupID(ctx, fa, types.EmptyTSK)
+	if err != nil {
+		return err
+	}
+
+	maddr, err := address.NewFromString(s.owner)
+	if err != nil {
+		return err
+	}
+
+	mi, err := api.StateMinerInfo(ctx, maddr, types.EmptyTSK)
+	if err != nil {
+		return err
+	}
+
+	if fromAddrId != mi.Owner && fromAddrId != newAddrId {
+		return fmt.Errorf("from address must either be the old owner or the new owner")
+	}
+
+	sp, err := actors.SerializeParams(&newAddrId)
+	if err != nil {
+		return fmt.Errorf("serializing params: %w", err)
+	}
+
+	smsg, err := api.MpoolPushMessage(ctx, &types.Message{
+		From:   fromAddrId,
+		To:     maddr,
+		Method: miner.Methods.ChangeOwnerAddress,
+		Value:  big.Zero(),
+		Params: sp,
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("mpool push: %w", err)
+	}
+
+	fmt.Println("Message CID:", smsg.Cid())
+
+	// wait for it to get mined into a block
+	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), build.MessageConfidence, abi.ChainEpoch(4), false)
+	if err != nil {
+		return err
+	}
+
+	// check it executed successfully
+	if wait.Receipt.ExitCode != 0 {
+		fmt.Println("owner change failed!")
+		return err
+	}
+
+	fmt.Println("message succeeded!")
+
+	return nil
+}
+
+var transferCmd = &cli.Command{
+	Name:  "transfer",
+	Usage: "transfer miner ownership to another address",
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "new",
+			Usage: "new owner address",
+		},
+		&cli.StringFlag{
+			Name:  "owner",
+			Usage: "current owner address",
+		},
+	},
+	Action: func(c *cli.Context) error {
+		if c.String("new") == "" {
+			log.Fatal("new addresses are required")
+		}
+		new := c.String("new")
+		ctx := context.Background()
+
+		miner := NewMiner(c.String("owner"), "", "")
+
+		err := miner.TransferOwnership(ctx, new)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	},
 }
