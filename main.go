@@ -288,6 +288,8 @@ var buyCmd = &cli.Command{
 			zerothDeadline := GetZerothDeadlineFromCurrentDeadline(cd)
 
 			log.Println(zerothDeadline.Hour())
+			log.Println(svc.start.Hour())
+			log.Println(svc.finish.Hour())
 			// if the zeroth deadline is between the time range set, backup miner
 			if zerothDeadline.Hour() >= svc.start.Hour() && zerothDeadline.Hour() <= svc.finish.Hour() {
 				log.Println("backing up miner; in tz")
