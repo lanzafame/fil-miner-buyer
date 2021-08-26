@@ -260,6 +260,7 @@ var buyCmd = &cli.Command{
 			if err != nil {
 				return fmt.Errorf("creating BLS wallet failed: %w", err)
 			}
+			svc.worker = worker
 			log.Println(worker)
 			log.Println("initing miner")
 			err = svc.InitMiner(ctx)
