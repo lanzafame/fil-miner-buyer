@@ -92,6 +92,9 @@ func NewService(ctx context.Context, threshold string, times ...string) *Service
 	if len(times) == 0 {
 		start, _ = time.Parse(time.Kitchen, "9:00AM")
 		finish, _ = time.Parse(time.Kitchen, "5:00PM")
+	} else {
+		start, _ = time.Parse(time.Kitchen, times[0])
+		finish, _ = time.Parse(time.Kitchen, times[1])
 	}
 
 	h, err := homedir.Dir()
