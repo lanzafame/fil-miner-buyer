@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/filecoin-project/go-address"
@@ -74,7 +75,7 @@ func (s Miner) MinerPathEnv() string {
 	return fmt.Sprintf("LOTUS_MINER_PATH=%s", minerpath)
 }
 
-func NewService(ctx context.Context, threshold string) *Service {
+func NewService(ctx context.Context, threshold string, times ...string) *Service {
 	api, closer, err := LotusClient(ctx)
 	if err != nil {
 		log.Fatalf("connecting with lotus failed: %s", err)
@@ -87,8 +88,11 @@ func NewService(ctx context.Context, threshold string) *Service {
 		log.Fatalf("parsing threshold failed: %s", err)
 	}
 
-	start, _ := time.Parse(time.Kitchen, "9:00AM")
-	finish, _ := time.Parse(time.Kitchen, "5:00PM")
+	var start, finish time.Time
+	if len(times) == 0 {
+		start, _ = time.Parse(time.Kitchen, "9:00AM")
+		finish, _ = time.Parse(time.Kitchen, "5:00PM")
+	}
 
 	h, err := homedir.Dir()
 	if err != nil {
@@ -137,10 +141,6 @@ var fixCmd = &cli.Command{
 	Name:  "fix",
 	Usage: "fix <minerID> <minerAddress>",
 	Action: func(c *cli.Context) error {
-		h, err := homedir.Dir()
-		if err != nil {
-			log.Printf("getting home directory failed: %s", err)
-		}
 		miner := NewMiner("", c.Args().Get(1), c.Args().Get(0))
 
 		return miner.fixMinerMetadata(context.Background())
@@ -151,10 +151,6 @@ var getCmd = &cli.Command{
 	Name:  "get",
 	Usage: "get <minerID>",
 	Action: func(c *cli.Context) error {
-		h, err := homedir.Dir()
-		if err != nil {
-			log.Printf("getting home directory failed: %s", err)
-		}
 		miner := NewMiner("", c.Args().Get(0), "")
 		addr, err := miner.getMinerMetadata(context.Background())
 		if err != nil {
@@ -242,11 +238,21 @@ var backupCmd = &cli.Command{
 
 var buyCmd = &cli.Command{
 	Name: "buy",
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:     "start",
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "finish",
+			Required: true,
+		},
+	},
 	Action: func(c *cli.Context) error {
 		ctx := context.Background()
 
 		threshold := os.Getenv("THRESHOLD")
-		svc := NewService(ctx, threshold)
+		svc := NewService(ctx, threshold, c.String("start"), c.String("finish"))
 		defer svc.closer()
 
 		if svc.IsGasPriceBelowThreshold(ctx) {
@@ -514,6 +520,9 @@ func LotusMinerClient(ctx context.Context) (lotusapi.StorageMiner, jsonrpc.Clien
 	authToken := os.Getenv("LOTUSMINER_TOKEN")
 	headers := http.Header{"Authorization": []string{"Bearer " + authToken}}
 	addr := os.Getenv("LOTUSMINER_API")
+	if addr == "" {
+		addr = "127.0.0.1:2345"
+	}
 
 	return client.NewStorageMinerRPCV0(ctx, "ws://"+addr+"/rpc/v0", headers)
 }
@@ -613,6 +622,12 @@ func (s Miner) transferOwnership(ctx context.Context, new string) error {
 	}
 	defer acloser()
 
+	mapi, mcloser, err := LotusMinerClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer mcloser()
+
 	na, err := address.NewFromString(new)
 	if err != nil {
 		return err
@@ -633,7 +648,7 @@ func (s Miner) transferOwnership(ctx context.Context, new string) error {
 		return err
 	}
 
-	maddr, err := address.NewFromString(s.owner)
+	maddr, err := mapi.ActorAddress(ctx)
 	if err != nil {
 		return err
 	}
@@ -709,6 +724,51 @@ var transferCmd = &cli.Command{
 			return err
 		}
 
+		return nil
+	},
+}
+
+var bulkTransferCmd = &cli.Command{
+	Name:        "bulk-transfer",
+	Description: "transfer miner ownership to all addresses in a file",
+	Usage:       "bulk-transfer --file keepminer.list [<new-owner> <new-owner-address> <new-owner-address> ...]",
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "file",
+			Value: "keepminer.list",
+		},
+	},
+	Action: func(c *cli.Context) error {
+		if c.String("file") == "" {
+			log.Fatal("file of addresses is required")
+		}
+		ctx := context.Background()
+
+		file := c.String("file")
+
+		// read file contents
+		content, err := ioutil.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("failed to read file: %w", err)
+		}
+
+		if c.Args().Len() > 0 {
+			newOwners := c.Args().Slice()
+
+			// parse addresses
+			addrs := strings.Split(string(content), "\n")
+
+			for _, o := range newOwners {
+				for i := 0; i < 9; i++ {
+					miner := NewMiner(addrs[i], "", "")
+
+					err = miner.TransferOwnership(ctx, o)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
 		return nil
 	},
 }
