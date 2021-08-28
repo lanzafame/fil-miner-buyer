@@ -67,6 +67,9 @@ func NewMiner(owner, worker, id string) Miner {
 }
 
 func (s Miner) MinerPath() string {
+	if minerpath, ok := os.LookupEnv("LOTUS_MINER_PATH"); ok {
+		return minerpath
+	}
 	return home(s.h, fmt.Sprintf(".lotusminer-%s", s.worker))
 }
 
