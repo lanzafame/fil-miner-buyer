@@ -249,15 +249,23 @@ var backupCmd = &cli.Command{
 		if err != nil {
 			return fmt.Errorf("starting miner failed: %w", err)
 		}
+		var stopped bool
 		defer func() {
-			err := svc.StopMiner(ctx)
-			log.Println("stopping miner failed:", err)
+			if !stopped {
+				err := svc.StopMiner(ctx)
+				log.Println("stopping miner failed:", err)
+			}
 		}()
 
 		err = svc.BackupMiner(ctx, 2)
 		if err != nil {
 			return fmt.Errorf("backing up miner failed: %w", err)
 		}
+		err = svc.StopMiner(ctx)
+		if err != nil {
+			return fmt.Errorf("stopping miner failed: %w", err)
+		}
+		stopped = true
 
 		err = svc.RemoveMinerDir(ctx)
 		if err != nil {
