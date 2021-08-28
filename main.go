@@ -223,9 +223,9 @@ var infoCmd = &cli.Command{
 				fmt.Printf("%s\t%s", svc.owner, maddr)
 				return nil
 			}
+		} else {
+			fmt.Println(GetZerothDeadlineFromCurrentDeadline(cd).Hour())
 		}
-
-		fmt.Println(GetZerothDeadlineFromCurrentDeadline(cd).Hour())
 
 		return nil
 	},
