@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/lotus/node/repo"
@@ -10,7 +11,7 @@ import (
 )
 
 func (s Miner) GetDatastore(ctx context.Context) (repo.LockedRepo, error) {
-	r, err := repo.NewFS(s.MinerPath())
+	r, err := repo.NewFS(os.Getenv("LOTUS_MINER_PATH"))
 	if err != nil {
 		return nil, err
 	}
