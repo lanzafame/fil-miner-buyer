@@ -66,15 +66,12 @@ func NewMiner(owner, worker, id string) Miner {
 }
 
 func (s Miner) MinerPath() string {
-	if minerpath, ok := os.LookupEnv("LOTUS_MINER_PATH"); ok {
-		return minerpath
-	}
-	return home(s.h, fmt.Sprintf(".lotusminer-%s", s.worker))
+	prefix := os.Getenv("LOTUS_MINER_PATH_PREFIX")
+	return home(s.h, fmt.Sprintf("%s%s", prefix, s.worker))
 }
 
 func (s Miner) MinerPathEnv() string {
-	prefix := os.Getenv("LOTUS_MINER_PATH_PREFIX")
-	minerpath := home(s.h, fmt.Sprintf("%s%s", prefix, s.worker))
+	minerpath := s.MinerPath()
 	return fmt.Sprintf("LOTUS_MINER_PATH=%s", minerpath)
 }
 
