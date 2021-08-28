@@ -166,11 +166,19 @@ var getCmd = &cli.Command{
 
 var infoCmd = &cli.Command{
 	Name: "info",
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name: "start",
+		},
+		&cli.StringFlag{
+			Name: "finish",
+		},
+	},
 	Action: func(c *cli.Context) error {
 		ctx := context.Background()
 
 		threshold := os.Getenv("THRESHOLD")
-		svc := NewService(ctx, threshold)
+		svc := NewService(ctx, threshold, c.String("start"), c.String("finish"))
 
 		if c.Args().Len() < 1 {
 			return fmt.Errorf("please provide a worker address")
@@ -197,8 +205,26 @@ var infoCmd = &cli.Command{
 		if err != nil {
 			return fmt.Errorf("getting miner proving info failed: %w", err)
 		}
+		zerothDeadline := GetZerothDeadlineFromCurrentDeadline(cd)
 
-		fmt.Println(GetZerothDeadlineFromCurrentDeadline(cd).String())
+		if c.String("start") != "" && c.String("finish") != "" {
+			if zerothDeadline.Hour() >= svc.start.Hour() && zerothDeadline.Hour() <= svc.finish.Hour() {
+				mapi, mcloser, err := LotusMinerClient(ctx)
+				if err != nil {
+					return err
+				}
+				defer mcloser()
+
+				maddr, err := mapi.ActorAddress(ctx)
+				if err != nil {
+					return err
+				}
+
+				fmt.Printf("%s\t%s", svc.owner, maddr)
+				return nil
+			}
+		}
+
 		fmt.Println(GetZerothDeadlineFromCurrentDeadline(cd).Hour())
 
 		return nil
