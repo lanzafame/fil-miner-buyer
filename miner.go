@@ -90,6 +90,13 @@ func (s *Service) StopMiner(ctx context.Context) error {
 
 	cmd := exec.CommandContext(ctx, "lotus-miner", args...)
 	cmd.Env = append(os.Environ(), s.MinerPathEnv())
+	if debug {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	} else {
+		cmd.Stdout = ioutil.Discard
+		cmd.Stderr = ioutil.Discard
+	}
 	err := cmd.Run()
 	if err != nil {
 		return err
