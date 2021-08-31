@@ -93,6 +93,7 @@ func NewService(ctx context.Context, threshold string, times ...string) *Service
 		start, _ = time.Parse(time.Kitchen, "9:00AM")
 		finish, _ = time.Parse(time.Kitchen, "5:00PM")
 	} else {
+		fmt.Println("times:", times)
 		start, _ = time.Parse(time.Kitchen, times[0])
 		finish, _ = time.Parse(time.Kitchen, times[1])
 	}
@@ -178,7 +179,6 @@ var infoCmd = &cli.Command{
 		ctx := context.Background()
 
 		threshold := os.Getenv("THRESHOLD")
-		fmt.Println(c.String("start"), c.String("finish"))
 		svc := NewService(ctx, threshold, c.String("start"), c.String("finish"))
 
 		if c.Args().Len() < 1 {
