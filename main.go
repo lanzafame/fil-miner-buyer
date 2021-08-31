@@ -178,6 +178,7 @@ var infoCmd = &cli.Command{
 		ctx := context.Background()
 
 		threshold := os.Getenv("THRESHOLD")
+		fmt.Println(c.String("start"), c.String("finish"))
 		svc := NewService(ctx, threshold, c.String("start"), c.String("finish"))
 
 		if c.Args().Len() < 1 {
