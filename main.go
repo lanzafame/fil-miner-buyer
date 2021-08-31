@@ -179,7 +179,9 @@ var infoCmd = &cli.Command{
 		ctx := context.Background()
 
 		threshold := os.Getenv("THRESHOLD")
-		svc := NewService(ctx, threshold, c.String("start"), c.String("finish"))
+		svc := NewService(ctx, threshold)
+		svc.start, _ = time.Parse(time.Kitchen, c.String("start"))
+		svc.finish, _ = time.Parse(time.Kitchen, c.String("finish"))
 
 		if c.Args().Len() < 1 {
 			return fmt.Errorf("please provide a worker address")
