@@ -208,7 +208,8 @@ var infoCmd = &cli.Command{
 		zerothDeadline := GetZerothDeadlineFromCurrentDeadline(cd)
 
 		if c.String("start") != "" && c.String("finish") != "" {
-			if zerothDeadline.Hour() >= svc.start.Hour() && zerothDeadline.Hour() <= svc.finish.Hour() {
+			fmt.Printf("start: %d\tdeadline: %d\tfinish: %d", svc.start.Hour(), zerothDeadline.Hour(), svc.finish.Hour())
+			if svc.start.Hour() <= zerothDeadline.Hour() && zerothDeadline.Hour() <= svc.finish.Hour() {
 				mapi, mcloser, err := LotusMinerClient(ctx)
 				if err != nil {
 					return err
