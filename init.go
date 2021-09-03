@@ -45,12 +45,12 @@ var initCmd = &cli.Command{
 func Init(ctx context.Context, api v1api.FullNode) (address.Address, error) {
 	peerid, err := api.ID(ctx)
 	if err != nil {
-		return address.Undef, err
+		return address.Undef, fmt.Errorf("failed to get peer id: %w", err)
 	}
 
 	owner, err := api.WalletDefaultAddress(ctx)
 	if err != nil {
-		return address.Undef, err
+		return address.Undef, fmt.Errorf("failed to get default wallet: %w", err)
 	}
 
 	ssize, err := units.RAMInBytes("32GiB")
@@ -60,7 +60,7 @@ func Init(ctx context.Context, api v1api.FullNode) (address.Address, error) {
 
 	worker, err := api.WalletNew(ctx, types.KTBLS)
 	if err != nil {
-		return address.Address{}, err
+		return address.Address{}, fmt.Errorf("failed to create worker wallet address: %w", err)
 	}
 
 	// make sure the worker account exists on chain
@@ -104,7 +104,7 @@ func Init(ctx context.Context, api v1api.FullNode) (address.Address, error) {
 		Peer:          abi.PeerID(peerid),
 	})
 	if err != nil {
-		return address.Undef, err
+		return address.Undef, xerrors.Errorf("failed to serialize params: %w", err)
 	}
 
 	sender := owner
@@ -140,7 +140,7 @@ func Init(ctx context.Context, api v1api.FullNode) (address.Address, error) {
 
 	var retval power2.CreateMinerReturn
 	if err := retval.UnmarshalCBOR(bytes.NewReader(mw.Receipt.Return)); err != nil {
-		return address.Undef, err
+		return address.Undef, xerrors.Errorf("failed to unmarshal cbor: %w", err)
 	}
 
 	log.Infof("New miners address is: %s (%s)", retval.IDAddress, retval.RobustAddress)
