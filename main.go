@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -22,11 +21,14 @@ import (
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/specs-actors/actors/builtin"
+	logging "github.com/ipfs/go-log/v2"
 	"github.com/mitchellh/go-homedir"
 	"github.com/urfave/cli/v2"
 )
 
 var debug bool
+
+var log = logging.Logger("main")
 
 type Service struct {
 	api    lotusapi.FullNode
@@ -54,7 +56,7 @@ func NewMiner(owner, worker, id string) Miner {
 
 	h, err := homedir.Dir()
 	if err != nil {
-		log.Printf("getting home directory failed: %s", err)
+		log.Infof("getting home directory failed: %s", err)
 	}
 
 	return Miner{
@@ -100,7 +102,7 @@ func NewService(ctx context.Context, threshold string, times ...string) *Service
 
 	h, err := homedir.Dir()
 	if err != nil {
-		log.Printf("getting home directory failed: %s", err)
+		log.Infof("getting home directory failed: %s", err)
 	}
 
 	miner := Miner{owner, "", "", h}
@@ -116,6 +118,7 @@ func main() {
 		backupCmd,
 		getCmd,
 		transferCmd,
+		initCmd,
 	}
 
 	app := &cli.App{
@@ -190,7 +193,7 @@ var infoCmd = &cli.Command{
 		svc.worker = c.Args().First()
 		err := svc.RestoreMiner(ctx)
 		if err != nil {
-			log.Printf("restoring miner failed: %s", err)
+			log.Infof("restoring miner failed: %s", err)
 		}
 
 		err = svc.StartMiner(ctx)
@@ -201,7 +204,7 @@ var infoCmd = &cli.Command{
 
 		err = svc.SetMinerToken(ctx)
 		if err != nil {
-			log.Printf("setting miner token failed: %s", err)
+			log.Infof("setting miner token failed: %s", err)
 		}
 
 		cd, err := svc.GetMinerProvingInfo(ctx)
@@ -256,7 +259,7 @@ var backupCmd = &cli.Command{
 		defer func() {
 			if !stopped {
 				err := svc.StopMiner(ctx)
-				log.Println("stopping miner failed:", err)
+				log.Info("stopping miner failed:", err)
 			}
 		}()
 
@@ -304,14 +307,14 @@ var buyCmd = &cli.Command{
 				return fmt.Errorf("creating BLS wallet failed: %w", err)
 			}
 			svc.worker = worker
-			log.Println(worker)
-			log.Println("initing miner")
+			log.Info(worker)
+			log.Info("initing miner")
 			err = svc.InitMiner(ctx)
 			if err != nil {
 				return fmt.Errorf("init miner failed: %w", err)
 			}
 
-			log.Println("starting miner")
+			log.Info("starting miner")
 			err = svc.StartMiner(ctx)
 			if err != nil {
 				return fmt.Errorf("starting miner failed: %w", err)
@@ -330,25 +333,25 @@ var buyCmd = &cli.Command{
 			}
 			zerothDeadline := GetZerothDeadlineFromCurrentDeadline(cd)
 
-			log.Println(zerothDeadline.Hour())
-			log.Println(svc.start.Hour())
-			log.Println(svc.finish.Hour())
+			log.Info(zerothDeadline.Hour())
+			log.Info(svc.start.Hour())
+			log.Info(svc.finish.Hour())
 			// if the zeroth deadline is between the time range set, backup miner
 			if zerothDeadline.Hour() >= svc.start.Hour() && zerothDeadline.Hour() <= svc.finish.Hour() {
-				log.Println("backing up miner; in tz")
+				log.Info("backing up miner; in tz")
 				err = svc.BackupMiner(ctx, 1)
 				if err != nil {
 					return fmt.Errorf("backing up miner failed: %w", err)
 				}
 			} else {
-				log.Println("backing up miner; not in tz")
+				log.Info("backing up miner; not in tz")
 				svc.BackupMiner(ctx, 0)
 				if err != nil {
 					return fmt.Errorf("backing up sell miner failed: %w", err)
 				}
 			}
 
-			log.Printf("moving miner dir")
+			log.Info("moving miner dir")
 			err = svc.RemoveMinerDir(ctx)
 			if err != nil {
 				return fmt.Errorf("removing miner dir failed: %w", err)
@@ -481,7 +484,7 @@ func GetZerothDeadlineFromCurrentDeadline(dl *dline.Info) time.Time {
 func (s *Service) SetMinerToken(ctx context.Context) error {
 	content, err := ioutil.ReadFile(fmt.Sprintf("%s/token", s.MinerPath()))
 	if err != nil {
-		log.Printf("reading token failed: %s", err)
+		log.Infof("reading token failed: %s", err)
 		return err
 	}
 	os.Setenv("LOTUSMINER_TOKEN", string(content))
