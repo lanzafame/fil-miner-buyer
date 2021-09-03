@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 
 	"github.com/docker/go-units"
@@ -17,6 +18,8 @@ import (
 	"github.com/filecoin-project/lotus/chain/actors/builtin/power"
 	"github.com/filecoin-project/lotus/chain/types"
 	power2 "github.com/filecoin-project/specs-actors/v2/actors/builtin/power"
+	crypto "github.com/libp2p/go-libp2p-core/crypto"
+	peer "github.com/libp2p/go-libp2p-core/peer"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/xerrors"
 )
@@ -43,9 +46,14 @@ var initCmd = &cli.Command{
 }
 
 func Init(ctx context.Context, api v1api.FullNode) (address.Address, error) {
-	peerid, err := api.ID(ctx)
+	p2pSk, _, err := crypto.GenerateEd25519Key(rand.Reader)
 	if err != nil {
-		return address.Undef, fmt.Errorf("failed to get peer id: %w", err)
+		return address.Undef, fmt.Errorf("failed to generate priv key: %w", err)
+	}
+
+	peerid, err := peer.IDFromPrivateKey(p2pSk)
+	if err != nil {
+		return address.Undef, xerrors.Errorf("peer ID from private key: %w", err)
 	}
 
 	owner, err := api.WalletDefaultAddress(ctx)
