@@ -32,7 +32,7 @@ var debug bool
 var log = logging.Logger("main")
 
 type Service struct {
-	api    lotusapi.FullNode
+	api    v0api.FullNode
 	closer jsonrpc.ClientCloser
 
 	threshold types.FIL
@@ -397,12 +397,12 @@ func (s *Service) GetGasPrice(ctx context.Context) (int64, error) {
 }
 
 // LotusClient returns a JSONRPC client for the Lotus API
-func LotusClient(ctx context.Context) (lotusapi.FullNode, jsonrpc.ClientCloser, error) {
+func LotusClient(ctx context.Context) (v0api.FullNode, jsonrpc.ClientCloser, error) {
 	authToken := os.Getenv("LOTUS_TOKEN")
 	headers := http.Header{"Authorization": []string{"Bearer " + authToken}}
 	addr := os.Getenv("LOTUS_API")
 
-	var api v0api.WrapperV1Full
+	var api v0api.FullNodeStruct
 	closer, err := jsonrpc.NewMergeClient(ctx, "ws://"+addr+"/rpc/v0", "Filecoin", []interface{}{&api.Internal, &api.CommonStruct.Internal}, headers)
 
 	return &api, closer, err
@@ -573,7 +573,8 @@ func (s Miner) transferOwnership(ctx context.Context, new string) error {
 	fmt.Println("Message CID:", smsg.Cid())
 
 	// wait for it to get mined into a block
-	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), build.MessageConfidence, abi.ChainEpoch(4), false)
+	// wait, err := api.StateWaitMsg(ctx, smsg.Cid(), build.MessageConfidence, abi.ChainEpoch(4), false)
+	wait, err := api.StateWaitMsg(ctx, smsg.Cid(), build.MessageConfidence)
 	if err != nil {
 		return err
 	}

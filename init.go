@@ -10,8 +10,7 @@ import (
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
-	lapi "github.com/filecoin-project/lotus/api"
-	"github.com/filecoin-project/lotus/api/v1api"
+	"github.com/filecoin-project/lotus/api/v0api"
 	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/actors"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
@@ -45,7 +44,7 @@ var initCmd = &cli.Command{
 	},
 }
 
-func Init(ctx context.Context, api v1api.FullNode) (address.Address, error) {
+func Init(ctx context.Context, api v0api.FullNode) (address.Address, error) {
 	p2pSk, _, err := crypto.GenerateEd25519Key(rand.Reader)
 	if err != nil {
 		return address.Undef, fmt.Errorf("failed to generate priv key: %w", err)
@@ -86,7 +85,8 @@ func Init(ctx context.Context, api v1api.FullNode) (address.Address, error) {
 		log.Infof("Initializing worker account %s, message: %s", worker, signed.Cid())
 		log.Infof("Waiting for confirmation")
 
-		mw, err := api.StateWaitMsg(ctx, signed.Cid(), build.MessageConfidence, lapi.LookbackNoLimit, true)
+		// mw, err := api.StateWaitMsg(ctx, signed.Cid(), build.MessageConfidence, lapi.LookbackNoLimit, true)
+		mw, err := api.StateWaitMsg(ctx, signed.Cid(), build.MessageConfidence)
 		if err != nil {
 			return address.Undef, xerrors.Errorf("waiting for worker init: %w", err)
 		}
@@ -137,7 +137,8 @@ func Init(ctx context.Context, api v1api.FullNode) (address.Address, error) {
 	log.Infof("Pushed CreateMiner message: %s", signed.Cid())
 	log.Infof("Waiting for confirmation")
 
-	mw, err := api.StateWaitMsg(ctx, signed.Cid(), build.MessageConfidence, lapi.LookbackNoLimit, true)
+	// mw, err := api.StateWaitMsg(ctx, signed.Cid(), build.MessageConfidence, lapi.LookbackNoLimit, true)
+	mw, err := api.StateWaitMsg(ctx, signed.Cid(), build.MessageConfidence)
 	if err != nil {
 		return address.Undef, xerrors.Errorf("waiting for createMiner message: %w", err)
 	}
