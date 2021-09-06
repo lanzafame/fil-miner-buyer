@@ -402,7 +402,7 @@ func LotusClient(ctx context.Context) (lotusapi.FullNode, jsonrpc.ClientCloser, 
 	addr := os.Getenv("LOTUS_API")
 
 	var api lotusapi.FullNodeStruct
-	closer, err := jsonrpc.NewMergeClient(ctx, "ws://"+addr+"/rpc/v0", "Filecoin", []interface{}{&api.Internal, &api.CommonStruct.Internal}, headers)
+	closer, err := jsonrpc.NewMergeClient(ctx, "ws://"+addr+"/rpc/v1", "Filecoin", []interface{}{&api.Internal, &api.CommonStruct.Internal}, headers)
 
 	return &api, closer, err
 }
