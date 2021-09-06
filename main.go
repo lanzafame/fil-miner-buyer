@@ -16,6 +16,7 @@ import (
 	"github.com/filecoin-project/go-state-types/dline"
 	lotusapi "github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/client"
+	"github.com/filecoin-project/lotus/api/v0api"
 	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/actors"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
@@ -401,7 +402,7 @@ func LotusClient(ctx context.Context) (lotusapi.FullNode, jsonrpc.ClientCloser, 
 	headers := http.Header{"Authorization": []string{"Bearer " + authToken}}
 	addr := os.Getenv("LOTUS_API")
 
-	var api lotusapi.FullNodeStruct
+	var api v0api.FullNodeStruct
 	closer, err := jsonrpc.NewMergeClient(ctx, "ws://"+addr+"/rpc/v0", "Filecoin", []interface{}{&api.Internal, &api.CommonStruct.Internal}, headers)
 
 	return &api, closer, err
