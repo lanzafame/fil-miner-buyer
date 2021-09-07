@@ -401,10 +401,7 @@ func LotusClient(ctx context.Context) (lotusapi.FullNode, jsonrpc.ClientCloser, 
 	headers := http.Header{"Authorization": []string{"Bearer " + authToken}}
 	addr := os.Getenv("LOTUS_API")
 
-	var api lotusapi.FullNodeStruct
-	closer, err := jsonrpc.NewMergeClient(ctx, "ws://"+addr+"/rpc/v1", "Filecoin", []interface{}{&api.Internal, &api.CommonStruct.Internal}, headers)
-
-	return &api, closer, err
+	return client.NewFullNodeRPCV1(ctx, addr, headers)
 }
 
 func LotusMinerClient(ctx context.Context) (lotusapi.StorageMiner, jsonrpc.ClientCloser, error) {
@@ -589,7 +586,7 @@ func (s Miner) transferOwnership(ctx context.Context, new string) error {
 	return nil
 }
 
-var transferCmd = &cli.Command{
+var oldTransferCmd = &cli.Command{
 	Name:  "transfer",
 	Usage: "transfer miner ownership to another address",
 	Flags: []cli.Flag{
@@ -661,6 +658,88 @@ var bulkTransferCmd = &cli.Command{
 				}
 			}
 		}
+		return nil
+	},
+}
+
+var transferCmd = &cli.Command{
+	Name:  "transfer",
+	Usage: "newAddr senderAddr minerID",
+	Action: func(cctx *cli.Context) error {
+		ctx := context.Background()
+
+		api, acloser, err := LotusClient(ctx)
+		if err != nil {
+			return err
+		}
+		defer acloser()
+
+		na, err := address.NewFromString(cctx.Args().First())
+		if err != nil {
+			return err
+		}
+
+		newAddrId, err := api.StateLookupID(ctx, na, types.EmptyTSK)
+		if err != nil {
+			return err
+		}
+
+		fa, err := address.NewFromString(cctx.Args().Get(1))
+		if err != nil {
+			return err
+		}
+
+		fromAddrId, err := api.StateLookupID(ctx, fa, types.EmptyTSK)
+		if err != nil {
+			return err
+		}
+
+		maddr, err := address.NewFromString(cctx.Args().Get(2))
+		if err != nil {
+			return err
+		}
+
+		mi, err := api.StateMinerInfo(ctx, maddr, types.EmptyTSK)
+		if err != nil {
+			return err
+		}
+
+		if fromAddrId != mi.Owner && fromAddrId != newAddrId {
+			return fmt.Errorf("from address must either be the old owner or the new owner")
+		}
+
+		sp, err := actors.SerializeParams(&newAddrId)
+		if err != nil {
+			return fmt.Errorf("serializing params: %w", err)
+		}
+
+		smsg, err := api.MpoolPushMessage(ctx, &types.Message{
+			From:   fromAddrId,
+			To:     maddr,
+			Method: miner.Methods.ChangeOwnerAddress,
+			Value:  big.Zero(),
+			Params: sp,
+		}, nil)
+		if err != nil {
+			return fmt.Errorf("mpool push: %w", err)
+		}
+
+		fmt.Println("Message CID:", smsg.Cid())
+
+		// wait for it to get mined into a block
+		wait, err := api.StateWaitMsg(ctx, smsg.Cid(), build.MessageConfidence, lotusapi.LookbackNoLimit, true)
+		if err != nil {
+			return err
+		}
+
+		// check it executed successfully
+		if wait.Receipt.ExitCode != 0 {
+			fmt.Println("owner change failed!")
+			return err
+		}
+
+		fmt.Println("message succeeded!")
+
 		return nil
 	},
 }
