@@ -401,7 +401,7 @@ func LotusClient(ctx context.Context) (lotusapi.FullNode, jsonrpc.ClientCloser, 
 	headers := http.Header{"Authorization": []string{"Bearer " + authToken}}
 	addr := os.Getenv("LOTUS_API")
 
-	return client.NewFullNodeRPCV1(ctx, addr, headers)
+	return client.NewFullNodeRPCV1(ctx, "ws://"+addr+"/rpc/v1", headers)
 }
 
 func LotusMinerClient(ctx context.Context) (lotusapi.StorageMiner, jsonrpc.ClientCloser, error) {
